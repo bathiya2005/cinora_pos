@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { getDb, saveDb } from './db.js';
+import { getDb, saveDb, refreshDb } from './db.js';
 import { User, Bill, BillItem, ExtraPayment } from '../types.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'alona-pos-secret-jwt-key-2026';
@@ -61,6 +61,19 @@ export async function createApp() {
         const parts = cookie.split('=');
         req.cookies[parts[0].trim()] = decodeURIComponent(parts[1] || '');
       });
+    }
+    next();
+  });
+
+  // Refresh in-memory data from MongoDB on every request. Needed on
+  // serverless platforms (Vercel): each warm function instance can hold its
+  // own stale in-memory copy, so without this a write made on one instance
+  // would not show up on requests served by a different instance.
+  app.use(async (_req, _res, next) => {
+    try {
+      await refreshDb();
+    } catch (e) {
+      console.error('MongoDB: error refreshing data store:', e);
     }
     next();
   });
@@ -137,7 +150,7 @@ export async function createApp() {
     return res.json(db.users);
   });
 
-  app.post('/api/users', authenticateToken, requireRole(['admin']), (req: Request, res: Response) => {
+  app.post('/api/users', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { username, password, branchName, status } = req.body;
 
     if (!username || !password || !branchName) {
@@ -163,12 +176,12 @@ export async function createApp() {
 
     db.users.push(newUser);
     db.passwords[newId] = passwordHash;
-    saveDb();
+    await saveDb();
 
     return res.status(201).json(newUser);
   });
 
-  app.put('/api/users/:id', authenticateToken, requireRole(['admin']), (req: Request, res: Response) => {
+  app.put('/api/users/:id', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { id } = req.params;
     const { username, password, branchName, status } = req.body;
 
@@ -193,11 +206,11 @@ export async function createApp() {
       db.passwords[id] = bcrypt.hashSync(password.trim(), 10);
     }
 
-    saveDb();
+    await saveDb();
     return res.json(user);
   });
 
-  app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), (req: AuthRequest, res: Response) => {
+  app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 
     if (id === req.user?.id) {
@@ -207,7 +220,7 @@ export async function createApp() {
     const db = getDb();
     db.users = db.users.filter((u) => u.id !== id);
     delete db.passwords[id];
-    saveDb();
+    await saveDb();
 
     return res.json({ success: true });
   });
@@ -218,7 +231,7 @@ export async function createApp() {
     return res.json(db.billSettings);
   });
 
-  app.post('/api/bill-settings', authenticateToken, requireRole(['admin']), (req: Request, res: Response) => {
+  app.post('/api/bill-settings', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { companyName, logoUrl, phoneNumbers, address, footerNote } = req.body;
     const db = getDb();
 
@@ -231,7 +244,7 @@ export async function createApp() {
       updatedAt: new Date().toISOString(),
     };
 
-    saveDb();
+    await saveDb();
     return res.json(db.billSettings);
   });
 
@@ -241,7 +254,7 @@ export async function createApp() {
     return res.json(db.products);
   });
 
-  app.post('/api/products', authenticateToken, (req: Request, res: Response) => {
+  app.post('/api/products', authenticateToken, async (req: Request, res: Response) => {
     const { name, category, unit, status } = req.body;
 
     if (!name || !category) {
@@ -259,11 +272,11 @@ export async function createApp() {
     };
 
     db.products.push(newProd);
-    saveDb();
+    await saveDb();
     return res.status(201).json(newProd);
   });
 
-  app.put('/api/products/:id', authenticateToken, (req: Request, res: Response) => {
+  app.put('/api/products/:id', authenticateToken, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, category, unit, status } = req.body;
 
@@ -279,15 +292,15 @@ export async function createApp() {
     if (unit) prod.unit = unit.trim();
     if (status) prod.status = status;
 
-    saveDb();
+    await saveDb();
     return res.json(prod);
   });
 
-  app.delete('/api/products/:id', authenticateToken, (req: Request, res: Response) => {
+  app.delete('/api/products/:id', authenticateToken, async (req: Request, res: Response) => {
     const { id } = req.params;
     const db = getDb();
     db.products = db.products.filter((p) => p.id !== id);
-    saveDb();
+    await saveDb();
     return res.json({ success: true });
   });
 
@@ -297,7 +310,7 @@ export async function createApp() {
     return res.json(db.deductionReasons);
   });
 
-  app.post('/api/deduction-reasons', authenticateToken, (req: Request, res: Response) => {
+  app.post('/api/deduction-reasons', authenticateToken, async (req: Request, res: Response) => {
     const { name, defaultAmount, status } = req.body;
 
     if (!name) {
@@ -313,11 +326,11 @@ export async function createApp() {
     };
 
     db.deductionReasons.push(newReason);
-    saveDb();
+    await saveDb();
     return res.status(201).json(newReason);
   });
 
-  app.put('/api/deduction-reasons/:id', authenticateToken, (req: Request, res: Response) => {
+  app.put('/api/deduction-reasons/:id', authenticateToken, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, defaultAmount, status } = req.body;
 
@@ -332,20 +345,20 @@ export async function createApp() {
     if (defaultAmount !== undefined) reason.defaultAmount = Number(defaultAmount);
     if (status) reason.status = status;
 
-    saveDb();
+    await saveDb();
     return res.json(reason);
   });
 
-  app.delete('/api/deduction-reasons/:id', authenticateToken, (req: Request, res: Response) => {
+  app.delete('/api/deduction-reasons/:id', authenticateToken, async (req: Request, res: Response) => {
     const { id } = req.params;
     const db = getDb();
     db.deductionReasons = db.deductionReasons.filter((r) => r.id !== id);
-    saveDb();
+    await saveDb();
     return res.json({ success: true });
   });
 
   // Bill Creation Route
-  app.post('/api/bills', authenticateToken, (req: AuthRequest, res: Response) => {
+  app.post('/api/bills', authenticateToken, async (req: AuthRequest, res: Response) => {
     const { customerName, customerContact, items, extraPayments } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -415,7 +428,7 @@ export async function createApp() {
     };
 
     db.bills.unshift(newBill);
-    saveDb();
+    await saveDb();
 
     return res.status(201).json(newBill);
   });
@@ -477,7 +490,7 @@ export async function createApp() {
   });
 
   // Delete Bill (Admin only) — removes the transaction record from bill history & reports
-  app.delete('/api/bills/:id', authenticateToken, requireRole(['admin']), (req: AuthRequest, res: Response) => {
+  app.delete('/api/bills/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const db = getDb();
     const exists = db.bills.some((b) => b.id === id);
@@ -487,7 +500,7 @@ export async function createApp() {
     }
 
     db.bills = db.bills.filter((b) => b.id !== id);
-    saveDb();
+    await saveDb();
     return res.json({ success: true });
   });
 

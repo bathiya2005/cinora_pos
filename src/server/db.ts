@@ -283,12 +283,13 @@ function buildSeedData(): DatabaseSchema {
 }
 
 /**
- * Connects to MongoDB, loads the persisted store document into memory,
- * or seeds and inserts default data if the database is empty.
- * Must be awaited once before the Express server starts handling requests.
+ * Connects to MongoDB (once per warm process/instance), loads the persisted
+ * store document into memory, or seeds and inserts default data if the
+ * database is empty. Must be awaited once before the Express server starts
+ * handling requests.
  */
 export async function connectDb(): Promise<void> {
-  if (mongoDb) return; // already connected
+  if (mongoDb) return; // client already connected, reuse it
 
   mongoClient = new MongoClient(MONGODB_URI);
   await mongoClient.connect();
@@ -310,6 +311,27 @@ export async function connectDb(): Promise<void> {
   console.log(`MongoDB: connected to database "${MONGODB_DB_NAME}".`);
 }
 
+/**
+ * Re-reads the latest store document from MongoDB into memory, reusing the
+ * existing connection. This matters on serverless platforms (Vercel): each
+ * warm function instance keeps its own in-memory copy of dbMemory, so a
+ * write made on one instance is invisible to another instance's cached copy
+ * until it refreshes. Called at the start of every request (see app.ts) so
+ * every request always sees the latest data instead of a stale snapshot.
+ */
+export async function refreshDb(): Promise<void> {
+  if (!mongoDb) {
+    await connectDb();
+    return;
+  }
+  const collection = mongoDb.collection<{ _id: string } & DatabaseSchema>(STORE_COLLECTION);
+  const existing = await collection.findOne({ _id: STORE_DOC_ID });
+  if (existing) {
+    const { _id, ...rest } = existing;
+    dbMemory = rest as DatabaseSchema;
+  }
+}
+
 /** Synchronous access to the in-memory store. connectDb() must run first. */
 export function getDb(): DatabaseSchema {
   if (!dbMemory) {
@@ -318,12 +340,19 @@ export function getDb(): DatabaseSchema {
   return dbMemory;
 }
 
-/** Persists the current in-memory store back to MongoDB. */
-export function saveDb() {
+/**
+ * Persists the current in-memory store back to MongoDB. Returns the write
+ * promise — callers should `await saveDb()` before sending their response,
+ * otherwise on serverless platforms the function can freeze/terminate right
+ * after the response is sent, before the write actually reaches MongoDB
+ * (data would then look like it "reverted" a moment later).
+ */
+export async function saveDb(): Promise<void> {
   if (!dbMemory || !mongoDb) return;
   const snapshot = dbMemory;
-  mongoDb
-    .collection(STORE_COLLECTION)
-    .updateOne({ _id: STORE_DOC_ID }, { $set: snapshot }, { upsert: true })
-    .catch((e) => console.error('MongoDB: error saving data store:', e));
+  try {
+    await mongoDb.collection(STORE_COLLECTION).updateOne({ _id: STORE_DOC_ID }, { $set: snapshot }, { upsert: true });
+  } catch (e) {
+    console.error('MongoDB: error saving data store:', e);
+  }
 }
