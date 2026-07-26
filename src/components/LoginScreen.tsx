@@ -11,13 +11,14 @@ const LOGIN_LOGO_PATH = '/login-logo.png';
 const ALONA_BRAND_LOGO_PATH = '/alona-logo.png';
 
 export function LoginScreen() {
-  const { login, billSettings } = usePos();
+  const { login } = usePos();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const shopName = billSettings?.companyName || 'UNIQUE OF CINNAMON';
+  // Login page brand name is fixed to "CINORA" — independent of Settings > companyName
+  const shopName = 'CINORA';
   const logoUrl = LOGIN_LOGO_PATH;
 
   const handleSubmit = async (e: React.FormEvent) => {
