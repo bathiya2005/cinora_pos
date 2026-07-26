@@ -1,0 +1,37 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --alona-green: #EAF6EC;
+  --alona-cream: #FCF3E8;
+  --alona-brand: #3E7A4C;
+  --alona-brand-dark: #2F5C3A;
+}
+
+html, body {
+  min-height: 100vh;
+}
+
+body {
+  background: linear-gradient(135deg, #EAF6EC 0%, #FFFFFF 50%, #FCF3E8 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  color: #1f2a22;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cfe3d4; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #b3d1ba; }

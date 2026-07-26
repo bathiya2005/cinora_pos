@@ -1,0 +1,6 @@
+{
+  "name": "Alona POS",
+  "description": "Produce & goods weighing and billing point-of-sale system with branch roles, weight deductions, custom receipts, and sales analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
