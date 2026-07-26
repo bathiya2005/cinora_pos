@@ -252,16 +252,16 @@ export function BillTemplateSettings() {
                 <span>TOTAL</span>
               </div>
               <div className="flex justify-between text-slate-800 py-1">
-                <span>Raw Cotton A</span>
-                <span>500.00kg</span>
-                <span>Rs. 4.50</span>
-                <span className="font-bold">Rs. 2,250.00</span>
+                <span>LOOSE C4 / C5</span>
+                <span>45.00kg</span>
+                <span>Rs. 3,200.00</span>
+                <span className="font-bold">Rs. 144,000.00</span>
               </div>
               <div className="flex justify-between text-slate-800 py-1">
-                <span>Sweet Potatoes</span>
-                <span>300.00kg</span>
-                <span>Rs. 2.20</span>
-                <span className="font-bold">Rs. 660.00</span>
+                <span>H1 / M4</span>
+                <span>28.00kg</span>
+                <span>Rs. 2,650.00</span>
+                <span className="font-bold">Rs. 74,200.00</span>
               </div>
             </div>
 
@@ -269,11 +269,11 @@ export function BillTemplateSettings() {
             <div className="pt-2 border-t-2 border-slate-800 space-y-1">
               <div className="flex justify-between text-xs text-slate-600">
                 <span>Total Net Weight:</span>
-                <span className="font-semibold text-slate-900">800.00 kg</span>
+                <span className="font-semibold text-slate-900">73.00 kg</span>
               </div>
               <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-1 border-t border-dashed border-slate-300">
                 <span>GRAND TOTAL:</span>
-                <span className="text-indigo-700 font-bold">Rs. 2,910.00</span>
+                <span className="text-indigo-700 font-bold">Rs. 218,200.00</span>
               </div>
             </div>
 

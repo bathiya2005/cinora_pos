@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePos } from '../context/PosContext';
-import { Lock, User as UserIcon, ArrowRight, ShieldCheck, Leaf } from 'lucide-react';
+import { Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
 
 // Login screen logo is fixed via code — place the image file at /public/login-logo.png
 // This is intentionally independent of Settings > Bill Template logoUrl, so updating the
@@ -61,15 +61,7 @@ export function LoginScreen() {
             src={logoUrl}
             alt={shopName}
             className="w-28 h-28 object-contain rounded-2xl bg-black p-3 shadow-2xl mb-6"
-            onError={(e) => {
-              // Falls back to the leaf icon if login-logo.png hasn't been added to /public yet
-              (e.currentTarget as HTMLImageElement).style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-            }}
           />
-          <div className="w-24 h-24 rounded-2xl bg-white/10 border border-white/30 backdrop-blur-sm hidden items-center justify-center mb-6 shadow-2xl">
-            <Leaf className="w-11 h-11 text-amber-200" />
-          </div>
 
           <h1 className="text-4xl font-extrabold text-white tracking-wide leading-tight">
             {shopName}
@@ -103,14 +95,7 @@ export function LoginScreen() {
               src={logoUrl}
               alt={shopName}
               className="w-16 h-16 object-contain rounded-xl bg-black shadow-md mx-auto mb-3 p-1.5"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
             />
-            <div className="inline-flex items-center justify-center p-3.5 bg-emerald-700 text-white rounded-2xl shadow-lg mb-3 hidden">
-              <Leaf className="w-7 h-7" />
-            </div>
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{shopName}</h1>
             <p className="text-slate-600 text-xs mt-1">Weighing &amp; Billing System</p>
           </div>
