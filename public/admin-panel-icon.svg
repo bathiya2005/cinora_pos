@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0F3D24"/>
+      <stop offset="1" stop-color="#0A2A19"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="40" y1="40" x2="160" y2="160" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="200" height="200" rx="40" fill="url(#bg)"/>
+
+  <!-- Shield outline (trust / admin access) -->
+  <path d="M100 34 L152 52 V96 C152 130 130 156 100 168 C70 156 48 130 48 96 V52 Z"
+        fill="none" stroke="url(#accent)" stroke-width="7" stroke-linejoin="round"/>
+
+  <!-- Dashboard grid inside the shield -->
+  <rect x="70" y="72" width="26" height="26" rx="5" fill="url(#accent)"/>
+  <rect x="104" y="72" width="26" height="18" rx="5" fill="#A7F3D0"/>
+  <rect x="70" y="106" width="26" height="18" rx="5" fill="#A7F3D0"/>
+  <rect x="104" y="98" width="26" height="26" rx="5" fill="url(#accent)"/>
+</svg>

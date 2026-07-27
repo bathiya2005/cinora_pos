@@ -186,7 +186,7 @@ export function BillTemplateSettings() {
                 type="text"
                 value={branchCompanyName}
                 onChange={(e) => setBranchCompanyName(e.target.value)}
-                placeholder="e.g. cinora Spice Exports (PVT) Ltd"
+                placeholder="e.g. Cinora Spice Exports (PVT) Ltd"
                 className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>

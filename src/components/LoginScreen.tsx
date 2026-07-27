@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { usePos } from '../context/PosContext';
-import { Lock, User as UserIcon, ArrowRight, ShieldCheck, LayoutDashboard } from 'lucide-react';
+import { Lock, User as UserIcon, ArrowRight, ShieldCheck } from 'lucide-react';
 
 // Same Alona brand logo used in the Sidebar (public/alona-logo.png), shown next to "Powered by Alona IT"
 const ALONA_BRAND_LOGO_PATH = '/alona-logo.png';
@@ -54,9 +54,11 @@ export function LoginScreen() {
 
         {/* Content over wallpaper */}
         <div className="relative z-10 flex flex-col items-center justify-center text-center px-10 w-full">
-          <div className="w-28 h-28 rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl mb-6">
-            <LayoutDashboard className="w-12 h-12 text-amber-100" />
-          </div>
+          <img
+            src="/admin-panel-icon.svg"
+            alt="Admin Panel"
+            className="w-28 h-28 object-contain rounded-2xl shadow-2xl mb-6"
+          />
 
           <h1 className="text-4xl font-extrabold text-white tracking-wide leading-tight">
             {shopName}
@@ -86,9 +88,11 @@ export function LoginScreen() {
         <div className="w-full max-w-md">
           {/* Mobile-only brand header */}
           <div className="lg:hidden text-center mb-8">
-            <div className="w-16 h-16 rounded-xl bg-emerald-800 flex items-center justify-center shadow-md mx-auto mb-3">
-              <LayoutDashboard className="w-7 h-7 text-white" />
-            </div>
+            <img
+              src="/admin-panel-icon.svg"
+              alt="Admin Panel"
+              className="w-16 h-16 object-contain rounded-xl shadow-md mx-auto mb-3"
+            />
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">{shopName}</h1>
             <p className="text-slate-600 text-xs mt-1">Weighing &amp; Billing System</p>
           </div>

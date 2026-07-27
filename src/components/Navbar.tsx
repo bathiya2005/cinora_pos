@@ -18,7 +18,7 @@ export function Navbar({ onOpenDeductionModal }: NavbarProps) {
   // their own user record) — independent of Settings > Template Settings.
   // Admin is shown as a fixed "Admin Panel" label, not any branch's identity.
   const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : 'Admin Panel';
-  const navLogoUrl = isBranch ? user?.logoUrl : undefined;
+  const navLogoUrl = isBranch ? user?.logoUrl : '/admin-panel-icon.svg';
 
   const handleLogoFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
