@@ -14,7 +14,7 @@ import { DeductionSettingsModal } from './components/DeductionSettingsModal';
 import { PrintReceiptModal } from './components/PrintReceiptModal';
 import { Toasts } from './components/Toasts';
 import { Bill } from './types';
-import { Scale, LayoutDashboard, Calculator, Users, Package, FileText, Receipt, BarChart3, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, Package, FileText, Receipt, BarChart3, SlidersHorizontal } from 'lucide-react';
 
 function MainAppContent() {
   const { user, loading } = usePos();
@@ -30,9 +30,11 @@ function MainAppContent() {
     return (
       <div className="min-h-screen text-slate-900 flex items-center justify-center">
         <div className="text-center space-y-3 animate-pulse">
-          <div className="p-3 bg-emerald-600/15 text-emerald-700 rounded-2xl inline-block">
-            <Scale className="w-8 h-8 animate-spin" />
-          </div>
+          <img
+            src="/alona-logo.png"
+            alt="Alona"
+            className="w-14 h-14 object-contain rounded-2xl mx-auto"
+          />
           <p className="text-sm font-semibold text-slate-500">Loading Alona POS System...</p>
         </div>
       </div>
