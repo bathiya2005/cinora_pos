@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PosProvider, usePos } from './context/PosContext';
 import { LoginScreen } from './components/LoginScreen';
 import { Navbar } from './components/Navbar';
@@ -25,6 +25,22 @@ function MainAppContent() {
   // Modals state
   const [isDeductionModalOpen, setIsDeductionModalOpen] = useState(false);
   const [printBillModal, setPrintBillModal] = useState<Bill | null>(null);
+
+  // Favicon + browser tab title reflect the logged-in branch's own identity
+  // (set via Navbar logo upload) — falls back to the CINORA defaults.
+  useEffect(() => {
+    const title = (user?.role === 'branch' && user.companyName) ? user.companyName : 'CINORA';
+    document.title = title;
+
+    const iconHref = (user?.role === 'branch' && user.logoUrl) ? user.logoUrl : '/login-logo.png';
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = iconHref;
+  }, [user?.companyName, user?.logoUrl, user?.role]);
 
   if (loading) {
     return (
@@ -68,7 +84,7 @@ function MainAppContent() {
             />
           )}
 
-          {activeTab === 'billing' && (
+          {activeTab === 'billing' && user.role !== 'admin' && (
             <BranchBillingScreen
               onOpenDeductionModal={() => setIsDeductionModalOpen(true)}
               onBillCreated={(bill) => setPrintBillModal(bill)}

@@ -141,6 +141,8 @@ export function UserManagement() {
         </div>
       </div>
 
+      <ChangeMyPasswordCard />
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Create Branch User Form (5 cols) */}
         <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
@@ -370,6 +372,88 @@ export function UserManagement() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ChangeMyPasswordCard() {
+  const { changePassword, addToast } = usePos();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentPassword || !newPassword) {
+      addToast('Enter your current and new password', 'error');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      addToast('New password and confirmation do not match', 'error');
+      return;
+    }
+    setSubmitting(true);
+    const result = await changePassword(currentPassword, newPassword);
+    setSubmitting(false);
+    if (result.success) {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } else {
+      addToast(result.error || 'Failed to change password', 'error');
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-md">
+      <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+        <KeyRound className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Change My Own Password
+      </h3>
+      <p className="text-xs text-slate-600 dark:text-slate-500 mb-4">
+        This changes the password for the account you're currently logged into (admin).
+      </p>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <div>
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 block">Current Password</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white text-sm"
+            placeholder="Current password"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 block">New Password</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white text-sm"
+            placeholder="New password"
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 mb-1 block">Confirm New Password</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-white text-sm"
+            placeholder="Confirm new password"
+          />
+        </div>
+        <div className="sm:col-span-3">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs shadow-md transition-colors"
+          >
+            {submitting ? 'Updating...' : 'Update Password'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

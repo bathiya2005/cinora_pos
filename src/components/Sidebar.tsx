@@ -26,9 +26,10 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   // Sidebar brand name is fixed to "Alona POS" — independent of Settings > companyName
   const companyName = 'Alona POS';
 
-  const adminNavItems = [
+  type NavItem = { id: string; label: string; icon: typeof LayoutDashboard; badge?: string };
+
+  const adminNavItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'billing', label: 'Billing Terminal', icon: Calculator, badge: 'POS' },
     { id: 'products', label: 'Products', icon: Package },
     { id: 'bills', label: 'Bill History', icon: Receipt },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
@@ -37,7 +38,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     { id: 'deductions', label: 'Deductions', icon: SlidersHorizontal },
   ];
 
-  const branchNavItems = [
+  const branchNavItems: NavItem[] = [
     { id: 'billing', label: 'Billing Terminal', icon: Calculator, badge: 'POS' },
     { id: 'products', label: 'Products', icon: Package },
     { id: 'bills', label: 'Bill History', icon: Receipt },
@@ -48,27 +49,31 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   const userInitials = user?.username ? user.username.slice(0, 2).toUpperCase() : 'AP';
 
   return (
-    <aside className="w-64 bg-gradient-to-b from-[#1F4429] to-[#173821] flex flex-col shrink-0 h-[calc(100vh-4rem)] sticky top-16 hidden md:flex border-r border-black/10">
+    <aside className="w-64 bg-[#132C1D] flex flex-col shrink-0 h-[calc(100vh-4rem)] sticky top-16 hidden md:flex border-r border-black/20">
       {/* Brand Header — fixed logo, set in code (public/alona-logo.png), independent of shop settings */}
-      <div className="p-6 flex items-center gap-3">
+      <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-white/[0.06]">
         <img
           src={SIDEBAR_LOGO_PATH}
           alt="Alona"
-          className="w-10 h-10 rounded-lg object-contain bg-white/95 shrink-0 shadow-sm"
+          className="w-9 h-9 rounded-lg object-contain bg-white shrink-0 ring-1 ring-white/10"
           onError={(e) => {
             // Falls back to the "A" mark if alona-logo.png hasn't been added to /public yet
             (e.currentTarget as HTMLImageElement).style.display = 'none';
             e.currentTarget.nextElementSibling?.classList.remove('hidden');
           }}
         />
-        <div className="w-10 h-10 bg-emerald-500 rounded-lg hidden items-center justify-center shrink-0">
-          <span className="text-white font-bold text-xl">A</span>
+        <div className="w-9 h-9 bg-emerald-500 rounded-lg hidden items-center justify-center shrink-0">
+          <span className="text-white font-bold text-base">A</span>
         </div>
-        <span className="text-white font-bold text-xl tracking-tight truncate">{companyName}</span>
+        <div className="min-w-0">
+          <p className="text-white font-bold text-[15px] leading-tight tracking-tight truncate">{companyName}</p>
+          <p className="text-emerald-200/45 text-[10.5px] font-medium tracking-wide truncate">Weighing &amp; Billing System</p>
+        </div>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto">
+      <nav className="flex-1 px-3 pt-5 space-y-0.5 overflow-y-auto">
+        <p className="px-3.5 pb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-200/35">Menu</p>
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -76,19 +81,22 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`relative w-full flex items-center justify-between pl-3.5 pr-3 py-2.5 rounded-lg text-[13.5px] transition-colors ${
                 isActive
-                  ? 'bg-emerald-500 text-white font-semibold shadow-sm'
-                  : 'text-emerald-100/70 hover:bg-white/10 hover:text-white'
+                  ? 'bg-white/[0.08] text-white font-semibold'
+                  : 'text-emerald-100/60 hover:bg-white/[0.05] hover:text-white'
               }`}
             >
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-emerald-400" />
+              )}
               <div className="flex items-center gap-3">
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon className={`w-[18px] h-[18px] shrink-0 ${isActive ? 'text-emerald-400' : 'text-emerald-100/40'}`} />
                 <span>{item.label}</span>
               </div>
               {item.badge && (
-                <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded uppercase tracking-wider ${
-                  isActive ? 'bg-white/20 text-white' : 'bg-emerald-400/20 text-emerald-300'
+                <span className={`px-1.5 py-0.5 text-[9px] font-extrabold rounded uppercase tracking-wider ${
+                  isActive ? 'bg-emerald-400/20 text-emerald-300' : 'bg-white/[0.06] text-emerald-100/40'
                 }`}>
                   {item.badge}
                 </span>
@@ -99,35 +107,38 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       </nav>
 
       {/* Software Vendor Branding — same Alona logo as the login form's "Powered by Alona IT" */}
-      <div className="px-4 pb-3 pt-1">
-        <div className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/5 border border-white/10">
+      <div className="px-3 pt-2 pb-2">
+        <div className="flex items-center justify-center gap-2 py-2 rounded-lg border border-white/[0.06]">
           <img
             src={SIDEBAR_LOGO_PATH}
             alt="Alona IT"
-            className="w-5 h-5 rounded-md object-contain shrink-0"
+            className="w-4 h-4 rounded object-contain shrink-0"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = 'none';
               e.currentTarget.nextElementSibling?.classList.remove('hidden');
             }}
           />
-          <div className="w-5 h-5 rounded-md bg-emerald-500 hidden items-center justify-center shrink-0">
-            <span className="text-white font-bold text-[10px]">A</span>
+          <div className="w-4 h-4 rounded bg-emerald-500 hidden items-center justify-center shrink-0">
+            <span className="text-white font-bold text-[9px]">A</span>
           </div>
-          <span className="text-emerald-100/60 text-[10px] font-semibold uppercase tracking-widest">
+          <span className="text-emerald-100/35 text-[9.5px] font-semibold uppercase tracking-widest">
             Powered by Alona IT
           </span>
         </div>
       </div>
 
       {/* User Footer Profile Card */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-emerald-800 flex items-center justify-center text-xs font-medium text-emerald-100 shrink-0">
-            {userInitials}
+      <div className="px-4 py-3.5 border-t border-white/[0.06]">
+        <div className="flex items-center gap-2.5">
+          <div className="relative shrink-0">
+            <div className="w-8 h-8 rounded-full bg-emerald-800 flex items-center justify-center text-[11px] font-bold text-emerald-100">
+              {userInitials}
+            </div>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-[#132C1D]" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{user?.username || 'User'}</p>
-            <p className="text-xs text-emerald-200/60 truncate">{user?.branchName || (isAdmin ? 'System Admin' : 'Cashier')}</p>
+            <p className="text-[13px] font-semibold text-white truncate leading-tight">{user?.username || 'User'}</p>
+            <p className="text-[11px] text-emerald-200/45 truncate">{user?.branchName || (isAdmin ? 'System Admin' : 'Cashier')}</p>
           </div>
         </div>
       </div>

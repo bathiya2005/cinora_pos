@@ -7,6 +7,10 @@ export interface User {
   branchName: string;
   status: 'active' | 'inactive';
   createdAt: string;
+  // Per-branch identity shown in that branch's Navbar and printed on that
+  // branch's bills — independent of the global BillSettings template.
+  logoUrl?: string;
+  companyName?: string;
 }
 
 export interface BillSettings {
@@ -70,6 +74,11 @@ export interface Bill {
   totalNetWeight: number;
   createdBy: string;
   createdAt: string;
+  // Snapshot of the creating branch's own identity at the time of billing,
+  // so the receipt always shows that branch's name/logo even if it's later
+  // changed. Falls back to the global BillSettings when absent.
+  companyName?: string;
+  logoUrl?: string;
 }
 
 export interface AnalyticsSummary {

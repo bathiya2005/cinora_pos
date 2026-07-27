@@ -129,6 +129,8 @@ export async function createApp() {
         branchName: user.branchName,
         status: user.status,
         createdAt: user.createdAt,
+        logoUrl: user.logoUrl,
+        companyName: user.companyName,
       },
     });
   });
@@ -141,6 +143,45 @@ export async function createApp() {
   // Auth: Logout
   app.post('/api/auth/logout', (_req: Request, res: Response) => {
     res.clearCookie('token');
+    return res.json({ success: true });
+  });
+
+  // Update MY OWN branch identity (Navbar logo + display name shown on my
+  // own bills). Any logged-in user (admin or branch) can set their own.
+  app.put('/api/users/me/branding', authenticateToken, async (req: AuthRequest, res: Response) => {
+    const { logoUrl, companyName } = req.body;
+
+    const db = getDb();
+    const user = db.users.find((u) => u.id === req.user!.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
+    if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
+
+    await saveDb();
+    return res.json(user);
+  });
+
+  // Change MY OWN password (used by admin to set their own password too,
+  // since admin accounts can't be edited via the branch-account endpoints).
+  app.put('/api/auth/change-password', authenticateToken, async (req: AuthRequest, res: Response) => {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword || String(newPassword).trim().length < 4) {
+      return res.status(400).json({ error: 'Current password and a new password (min 4 characters) are required.' });
+    }
+
+    const db = getDb();
+    const currentHash = db.passwords[req.user!.id];
+    if (!currentHash || !bcrypt.compareSync(currentPassword, currentHash)) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    db.passwords[req.user!.id] = bcrypt.hashSync(String(newPassword).trim(), 10);
+    await saveDb();
+
     return res.json({ success: true });
   });
 
@@ -425,6 +466,8 @@ export async function createApp() {
       totalAmount: grandTotal,
       createdBy: req.user!.username,
       createdAt: new Date().toISOString(),
+      companyName: req.user!.companyName || undefined,
+      logoUrl: req.user!.logoUrl || undefined,
     };
 
     db.bills.unshift(newBill);

@@ -19,9 +19,12 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
     }, 150);
   };
 
-  const companyName = billSettings?.companyName || 'Unique of Cinnamon';
+  // Prefer the branch's own identity snapshot saved on the bill itself
+  // (set at billing time from that branch's Navbar logo), falling back to
+  // the global Template Settings for older bills that predate this feature.
+  const companyName = bill.companyName || billSettings?.companyName || 'Unique of Cinnamon';
   const tagline = billSettings?.tagline || 'Spice Exports (PVT) Ltd';
-  const logoUrl = billSettings?.logoUrl;
+  const logoUrl = bill.logoUrl || billSettings?.logoUrl;
   const phones = billSettings?.phoneNumbers && billSettings.phoneNumbers.length > 0
     ? billSettings.phoneNumbers
     : ['+94 77 123 4567'];

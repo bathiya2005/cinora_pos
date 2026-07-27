@@ -1,19 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { usePos } from '../context/PosContext';
-import { Scale, LogOut, ShieldAlert, Store, SlidersHorizontal, Bell, Clock } from 'lucide-react';
+import { Scale, LogOut, ShieldAlert, Store, SlidersHorizontal, Bell, Clock, Pencil } from 'lucide-react';
 
 interface NavbarProps {
   onOpenDeductionModal: () => void;
 }
 
 export function Navbar({ onOpenDeductionModal }: NavbarProps) {
-  const { user, logout, billSettings } = usePos();
+  const { user, logout, billSettings, updateMyBranding } = usePos();
   const [timeString, setTimeString] = useState('');
   const [dateString, setDateString] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const companyName = billSettings?.companyName || 'Alona POS';
-  // Navbar logo now follows whatever logo is set in Settings > Template Settings (billSettings.logoUrl)
-  const navLogoUrl = billSettings?.logoUrl;
+  const isBranch = user?.role === 'branch';
+
+  // Branch accounts show their OWN logo/name (uploaded from here, stored on
+  // their own user record) — independent of Settings > Template Settings.
+  // Admin keeps the global Template Settings logo/name.
+  const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : (billSettings?.companyName || 'Alona POS');
+  const navLogoUrl = isBranch ? user?.logoUrl : billSettings?.logoUrl;
+
+  const handleLogoFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateMyBranding({ logoUrl: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   useEffect(() => {
     const updateTime = () => {
@@ -31,20 +47,41 @@ export function Navbar({ onOpenDeductionModal }: NavbarProps) {
       {/* Left: Header Title & Branch Badge */}
       <div className="flex items-center gap-4 min-w-0">
         <div className="flex items-center gap-3 min-w-0">
-          {navLogoUrl ? (
-            <img
-              src={navLogoUrl}
-              alt={companyName}
-              className="w-9 h-9 rounded-lg object-contain bg-white border border-emerald-900/10 shadow-sm shrink-0"
-              onError={(e) => {
-                // Falls back to the Scale icon if the settings logo fails to load
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }}
-            />
-          ) : null}
-          <div className={`w-9 h-9 bg-emerald-700 rounded-lg ${navLogoUrl ? 'hidden' : 'flex'} items-center justify-center text-white font-bold text-lg shadow-sm shrink-0`}>
-            <Scale className="w-5 h-5 text-white" />
+          <div className="relative shrink-0 group">
+            {navLogoUrl ? (
+              <img
+                src={navLogoUrl}
+                alt={companyName}
+                className="w-9 h-9 rounded-lg object-contain bg-white border border-emerald-900/10 shadow-sm shrink-0"
+                onError={(e) => {
+                  // Falls back to the Scale icon if the logo fails to load
+                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+            ) : null}
+            <div className={`w-9 h-9 bg-emerald-700 rounded-lg ${navLogoUrl ? 'hidden' : 'flex'} items-center justify-center text-white font-bold text-lg shadow-sm shrink-0`}>
+              <Scale className="w-5 h-5 text-white" />
+            </div>
+            {/* Branch users can upload their own Navbar logo, shown right here */}
+            {isBranch && (
+              <>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow ring-2 ring-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Upload your branch logo"
+                >
+                  <Pencil className="w-2.5 h-2.5" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleLogoFile}
+                />
+              </>
+            )}
           </div>
           <div className="hidden sm:block min-w-0">
             <h1 className="font-bold text-slate-900 text-base leading-none truncate">

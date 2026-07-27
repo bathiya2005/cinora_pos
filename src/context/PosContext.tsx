@@ -39,6 +39,8 @@ interface PosContextType {
   fetchBills: (params?: Record<string, string>) => Promise<Bill[]>;
   createBill: (data: { customerName?: string; customerContact?: string; items: any[]; extraPayments: any[] }) => Promise<Bill | null>;
   deleteBill: (id: string) => Promise<boolean>;
+  updateMyBranding: (data: { logoUrl?: string; companyName?: string }) => Promise<boolean>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const PosContext = createContext<PosContextType | undefined>(undefined);
@@ -143,6 +145,48 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUser(null);
     addToast('Logged out successfully', 'info');
+  };
+
+  // Update MY OWN branch Navbar logo / display name (independent of the
+  // global Template Settings). Used by branch users to upload their own logo.
+  const updateMyBranding = async (data: { logoUrl?: string; companyName?: string }) => {
+    try {
+      const res = await fetch('/api/users/me/branding', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      const updated = await res.json();
+      if (!res.ok) {
+        addToast(updated.error || 'Failed to update branding', 'error');
+        return false;
+      }
+      setUser(updated);
+      addToast('Branding updated!', 'success');
+      return true;
+    } catch {
+      addToast('Server error', 'error');
+      return false;
+    }
+  };
+
+  // Change MY OWN login password.
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to change password' };
+      }
+      addToast('Password updated!', 'success');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Server error' };
+    }
   };
 
   const fetchSettings = async () => {
@@ -403,6 +447,8 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
         fetchBills,
         createBill,
         deleteBill,
+        updateMyBranding,
+        changePassword,
       }}
     >
       <div>{children}</div>
