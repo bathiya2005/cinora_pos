@@ -7,7 +7,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ onOpenDeductionModal }: NavbarProps) {
-  const { user, logout, billSettings, updateMyBranding } = usePos();
+  const { user, logout, updateMyBranding } = usePos();
   const [timeString, setTimeString] = useState('');
   const [dateString, setDateString] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -16,9 +16,9 @@ export function Navbar({ onOpenDeductionModal }: NavbarProps) {
 
   // Branch accounts show their OWN logo/name (uploaded from here, stored on
   // their own user record) — independent of Settings > Template Settings.
-  // Admin keeps the global Template Settings logo/name.
-  const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : (billSettings?.companyName || 'Alona POS');
-  const navLogoUrl = isBranch ? user?.logoUrl : billSettings?.logoUrl;
+  // Admin is shown as a fixed "Admin Panel" label, not any branch's identity.
+  const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : 'Admin Panel';
+  const navLogoUrl = isBranch ? user?.logoUrl : undefined;
 
   const handleLogoFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -68,7 +68,7 @@ export function Navbar({ onOpenDeductionModal }: NavbarProps) {
               <>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow ring-2 ring-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full flex items-center justify-center shadow ring-2 ring-white"
                   title="Upload your branch logo"
                 >
                   <Pencil className="w-2.5 h-2.5" />

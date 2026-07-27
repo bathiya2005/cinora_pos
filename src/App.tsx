@@ -26,13 +26,15 @@ function MainAppContent() {
   const [isDeductionModalOpen, setIsDeductionModalOpen] = useState(false);
   const [printBillModal, setPrintBillModal] = useState<Bill | null>(null);
 
-  // Favicon + browser tab title reflect the logged-in branch's own identity
-  // (set via Navbar logo upload) — falls back to the CINORA defaults.
+  // Favicon + browser tab title reflect who's logged in: each branch shows
+  // its own identity (set via Navbar logo upload), while admin always shows
+  // a fixed "Admin Panel" title with the Alona logo as its favicon.
   useEffect(() => {
-    const title = (user?.role === 'branch' && user.companyName) ? user.companyName : 'CINORA';
+    const isBranch = user?.role === 'branch';
+    const title = isBranch && user?.companyName ? user.companyName : 'Admin Panel';
     document.title = title;
 
-    const iconHref = (user?.role === 'branch' && user.logoUrl) ? user.logoUrl : '/login-logo.png';
+    const iconHref = isBranch && user?.logoUrl ? user.logoUrl : '/alona-logo.png';
     let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
     if (!link) {
       link = document.createElement('link');

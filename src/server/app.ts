@@ -251,6 +251,26 @@ export async function createApp() {
     return res.json(user);
   });
 
+  // Admin: edit a specific branch's own bill/Navbar identity (name + logo)
+  // from the Template Settings page. Same fields the branch itself can set
+  // from its own Navbar, but editable centrally by the admin too.
+  app.put('/api/users/:id/branding', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { logoUrl, companyName } = req.body;
+
+    const db = getDb();
+    const user = db.users.find((u) => u.id === id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
+    if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
+
+    await saveDb();
+    return res.json(user);
+  });
+
   app.delete('/api/users/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
 

@@ -40,6 +40,7 @@ interface PosContextType {
   createBill: (data: { customerName?: string; customerContact?: string; items: any[]; extraPayments: any[] }) => Promise<Bill | null>;
   deleteBill: (id: string) => Promise<boolean>;
   updateMyBranding: (data: { logoUrl?: string; companyName?: string }) => Promise<boolean>;
+  updateBranchBranding: (userId: string, data: { logoUrl?: string; companyName?: string }) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -163,6 +164,28 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(updated);
       addToast('Branding updated!', 'success');
+      return true;
+    } catch {
+      addToast('Server error', 'error');
+      return false;
+    }
+  };
+
+  // Admin: edit a SPECIFIC branch's own bill/Navbar identity (name + logo)
+  // from the Template Settings page, e.g. cinora's or Ayu's.
+  const updateBranchBranding = async (userId: string, data: { logoUrl?: string; companyName?: string }) => {
+    try {
+      const res = await fetch(`/api/users/${userId}/branding`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data),
+      });
+      const updated = await res.json();
+      if (!res.ok) {
+        addToast(updated.error || 'Failed to update branch branding', 'error');
+        return false;
+      }
+      addToast('Branch bill identity updated!', 'success');
       return true;
     } catch {
       addToast('Server error', 'error');
@@ -448,6 +471,7 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
         createBill,
         deleteBill,
         updateMyBranding,
+        updateBranchBranding,
         changePassword,
       }}
     >
