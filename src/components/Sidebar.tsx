@@ -42,6 +42,7 @@ export function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     { id: 'billing', label: 'Billing Terminal', icon: Calculator, badge: 'POS' },
     { id: 'products', label: 'Products', icon: Package },
     { id: 'bills', label: 'Bill History', icon: Receipt },
+    { id: 'reports', label: 'Reports', icon: BarChart3 },
   ];
 
   const items = isAdmin ? adminNavItems : branchNavItems;

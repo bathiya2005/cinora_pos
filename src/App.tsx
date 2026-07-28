@@ -114,7 +114,7 @@ function MainAppContent() {
             <BillsHistory onReprintBill={(bill) => setPrintBillModal(bill)} />
           )}
 
-          {activeTab === 'reports' && user.role === 'admin' && <ReportsAnalytics />}
+          {activeTab === 'reports' && <ReportsAnalytics />}
         </main>
       </div>
 
@@ -132,15 +132,17 @@ function MainAppContent() {
           </button>
         )}
 
-        <button
-          onClick={() => setActiveTab('billing')}
-          className={`p-2 flex flex-col items-center text-[10px] ${
-            activeTab === 'billing' ? 'text-emerald-700 font-bold' : 'text-slate-500'
-          }`}
-        >
-          <Calculator className="w-5 h-5" />
-          <span>Billing</span>
-        </button>
+        {user.role !== 'admin' && (
+          <button
+            onClick={() => setActiveTab('billing')}
+            className={`p-2 flex flex-col items-center text-[10px] ${
+              activeTab === 'billing' ? 'text-emerald-700 font-bold' : 'text-slate-500'
+            }`}
+          >
+            <Calculator className="w-5 h-5" />
+            <span>Billing</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('products')}
@@ -162,17 +164,15 @@ function MainAppContent() {
           <span>Bills</span>
         </button>
 
-        {user.role === 'admin' && (
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`p-2 flex flex-col items-center text-[10px] ${
-              activeTab === 'reports' ? 'text-emerald-700 font-bold' : 'text-slate-500'
-            }`}
-          >
-            <BarChart3 className="w-5 h-5" />
-            <span>Reports</span>
-          </button>
-        )}
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`p-2 flex flex-col items-center text-[10px] ${
+            activeTab === 'reports' ? 'text-emerald-700 font-bold' : 'text-slate-500'
+          }`}
+        >
+          <BarChart3 className="w-5 h-5" />
+          <span>Reports</span>
+        </button>
       </div>
 
       {/* Modals */}

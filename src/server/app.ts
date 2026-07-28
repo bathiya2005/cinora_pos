@@ -568,15 +568,21 @@ export async function createApp() {
   });
 
   // Reports & Analytics Route
-  app.get('/api/reports', authenticateToken, requireRole(['admin']), (req: AuthRequest, res: Response) => {
+  app.get('/api/reports', authenticateToken, requireRole(['admin', 'branch']), (req: AuthRequest, res: Response) => {
     const db = getDb();
     let bills = [...db.bills];
 
-    if (req.user?.role === 'branch') {
+    const isBranchUser = req.user?.role === 'branch';
+    if (isBranchUser) {
       bills = bills.filter((b) => b.branchId === req.user?.id || b.branchName === req.user?.branchName);
     } else if (req.query.branchName && req.query.branchName !== 'all') {
       bills = bills.filter((b) => b.branchName.toLowerCase() === String(req.query.branchName).toLowerCase());
     }
+
+    // Bills scoped by role/branch, but BEFORE the date filter — used for the
+    // "monthly trend" charts, which always show the last 12 months
+    // regardless of the daily/custom date range picked above.
+    const scopedBills = bills;
 
     if (req.query.startDate) {
       const start = new Date(String(req.query.startDate)).getTime();
@@ -595,6 +601,10 @@ export async function createApp() {
     const categoryMap: Record<string, { category: string; weight: number; revenue: number }> = {};
     const salesByDateMap: Record<string, { date: string; revenue: number; weight: number; bills: number }> = {};
     const branchMap: Record<string, { branchName: string; revenue: number; weight: number; billsCount: number }> = {};
+    // date -> category -> weight, for the "daily weight by product" stacked chart
+    const categoryByDateMap: Record<string, Record<string, number>> = {};
+    // branchName -> category -> { weight, revenue }, for admin's per-branch product breakdown
+    const branchCategoryMap: Record<string, Record<string, { weight: number; revenue: number }>> = {};
 
     bills.forEach((b) => {
       totalRevenue += b.totalAmount;
@@ -615,6 +625,9 @@ export async function createApp() {
       branchMap[b.branchName].weight += b.totalNetWeight;
       branchMap[b.branchName].billsCount += 1;
 
+      if (!categoryByDateMap[dateStr]) categoryByDateMap[dateStr] = {};
+      if (!branchCategoryMap[b.branchName]) branchCategoryMap[b.branchName] = {};
+
       b.items.forEach((item) => {
         const cat = item.category || 'General';
         if (!categoryMap[cat]) {
@@ -622,12 +635,95 @@ export async function createApp() {
         }
         categoryMap[cat].weight += item.netWeight;
         categoryMap[cat].revenue += item.lineTotal;
+
+        categoryByDateMap[dateStr][cat] = (categoryByDateMap[dateStr][cat] || 0) + item.netWeight;
+
+        if (!branchCategoryMap[b.branchName][cat]) {
+          branchCategoryMap[b.branchName][cat] = { weight: 0, revenue: 0 };
+        }
+        branchCategoryMap[b.branchName][cat].weight += item.netWeight;
+        branchCategoryMap[b.branchName][cat].revenue += item.lineTotal;
       });
     });
 
     const topCategories = Object.values(categoryMap).sort((a, b) => b.revenue - a.revenue);
     const salesByDate = Object.values(salesByDateMap).sort((a, b) => a.date.localeCompare(b.date));
     const branchPerformance = Object.values(branchMap).sort((a, b) => b.revenue - a.revenue);
+
+    // Top 6 categories (by weight) drive the stacked-chart series/colors,
+    // everything else is rolled into "Other" so charts stay readable.
+    const topCategoryNames = [...topCategories]
+      .sort((a, b) => b.weight - a.weight)
+      .slice(0, 6)
+      .map((c) => c.category);
+
+    const buildPivotRow = (label: string, catWeights: Record<string, number>) => {
+      const row: Record<string, string | number> = { period: label };
+      let other = 0;
+      Object.entries(catWeights).forEach(([cat, w]) => {
+        if (topCategoryNames.includes(cat)) {
+          row[cat] = Number((((row[cat] as number) || 0) + w).toFixed(2));
+        } else {
+          other += w;
+        }
+      });
+      if (other > 0) row['Other'] = Number(other.toFixed(2));
+      return row;
+    };
+
+    const categoryDailyTrend = Object.keys(categoryByDateMap)
+      .sort()
+      .map((d) => buildPivotRow(d, categoryByDateMap[d]));
+
+    // Monthly trend (last 12 months) — always computed from the full
+    // role/branch-scoped bill set, independent of the daily date filter.
+    const monthlyMap: Record<string, { month: string; revenue: number; weight: number }> = {};
+    const monthlyCategoryMap: Record<string, Record<string, number>> = {};
+    scopedBills.forEach((b) => {
+      const d = new Date(b.createdAt);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[monthKey]) monthlyMap[monthKey] = { month: monthKey, revenue: 0, weight: 0 };
+      monthlyMap[monthKey].revenue += b.totalAmount;
+      monthlyMap[monthKey].weight += b.totalNetWeight;
+
+      if (!monthlyCategoryMap[monthKey]) monthlyCategoryMap[monthKey] = {};
+      b.items.forEach((item) => {
+        const cat = item.category || 'General';
+        monthlyCategoryMap[monthKey][cat] = (monthlyCategoryMap[monthKey][cat] || 0) + item.netWeight;
+      });
+    });
+
+    const last12Months: string[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      last12Months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    const monthLabel = (key: string) => {
+      const [y, m] = key.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    };
+
+    const monthlyTrend = last12Months.map((key) => ({
+      month: monthLabel(key),
+      revenue: Number((monthlyMap[key]?.revenue || 0).toFixed(2)),
+      weight: Number((monthlyMap[key]?.weight || 0).toFixed(2)),
+    }));
+
+    const categoryMonthlyTrend = last12Months.map((key) =>
+      buildPivotRow(monthLabel(key), monthlyCategoryMap[key] || {})
+    );
+
+    // Admin-only: one product breakdown per branch, for side-by-side
+    // "each branch separately, colored by product" charts.
+    const branchCategoryBreakdown = isBranchUser
+      ? []
+      : Object.entries(branchCategoryMap).map(([branchName, cats]) => ({
+          branchName,
+          categories: Object.entries(cats)
+            .map(([category, v]) => ({ category, weight: Number(v.weight.toFixed(2)), revenue: Number(v.revenue.toFixed(2)) }))
+            .sort((a, b) => b.weight - a.weight),
+        }));
 
     return res.json({
       totalBills,
@@ -636,6 +732,11 @@ export async function createApp() {
       topCategories,
       salesByDate,
       branchPerformance,
+      categoryNames: [...topCategoryNames, 'Other'],
+      categoryDailyTrend,
+      monthlyTrend,
+      categoryMonthlyTrend,
+      branchCategoryBreakdown,
     });
   });
 
