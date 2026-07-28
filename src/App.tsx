@@ -22,6 +22,16 @@ function MainAppContent() {
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<string>(user?.role === 'admin' ? 'dashboard' : 'billing');
 
+  // The activeTab default above is only computed once, at first mount —
+  // when the app first loads, `user` is still null (pre-login), so this
+  // resets to the correct landing tab the moment a login actually happens
+  // (whenever the logged-in user's id changes).
+  useEffect(() => {
+    if (user) {
+      setActiveTab(user.role === 'admin' ? 'dashboard' : 'billing');
+    }
+  }, [user?.id]);
+
   // Modals state
   const [isDeductionModalOpen, setIsDeductionModalOpen] = useState(false);
   const [printBillModal, setPrintBillModal] = useState<Bill | null>(null);

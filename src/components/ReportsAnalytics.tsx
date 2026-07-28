@@ -141,12 +141,12 @@ export function ReportsAnalytics() {
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 p-6 rounded-2xl shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-md">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <BarChart3 className="w-6 h-6" /> {isAdmin ? 'Business Reports & Branch Analytics' : 'My Branch Sales Report'}
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-indigo-600 dark:text-indigo-400" /> {isAdmin ? 'Business Reports & Branch Analytics' : 'My Branch Sales Report'}
           </h2>
-          <p className="text-xs text-indigo-100 mt-1">
+          <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">
             {isAdmin
               ? 'Daily & monthly sales, product-wise weight trends, and branch-by-branch performance.'
               : 'Your daily and monthly sales, and product-wise weight volumes.'}
@@ -155,7 +155,7 @@ export function ReportsAnalytics() {
 
         <button
           onClick={handleExportCSV}
-          className="px-4 py-2.5 bg-white hover:bg-indigo-50 text-indigo-700 font-bold rounded-xl text-xs shadow-lg flex items-center gap-1.5 transition-all shrink-0"
+          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center gap-1.5 transition-all shrink-0"
         >
           <Download className="w-4 h-4" /> Export Report to CSV
         </button>
@@ -238,44 +238,44 @@ export function ReportsAnalytics() {
         )}
       </div>
 
-      {/* KPI Cards — colorful gradient cards */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl flex items-center justify-between shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50">
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
-            <span className="text-[11px] font-bold text-indigo-100 uppercase">Filtered Revenue</span>
-            <h3 className="text-2xl font-bold text-white mt-1">Rs. {report?.totalRevenue?.toLocaleString() || 0}</h3>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Filtered Revenue</span>
+            <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">Rs. {report?.totalRevenue?.toLocaleString() || 0}</h3>
           </div>
-          <div className="p-3 bg-white/15 text-white rounded-xl">
+          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-between shadow-lg shadow-amber-200 dark:shadow-amber-950/50">
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
-            <span className="text-[11px] font-bold text-amber-100 uppercase">Net Weight Processed</span>
-            <h3 className="text-2xl font-bold text-white mt-1">{report?.totalWeight?.toLocaleString() || 0} kg</h3>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Net Weight Processed</span>
+            <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{report?.totalWeight?.toLocaleString() || 0} kg</h3>
           </div>
-          <div className="p-3 bg-white/15 text-white rounded-xl">
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 rounded-xl">
             <Scale className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-between shadow-lg shadow-emerald-200 dark:shadow-emerald-950/50">
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
-            <span className="text-[11px] font-bold text-emerald-100 uppercase">Verified Bills</span>
-            <h3 className="text-2xl font-bold text-white mt-1">{report?.totalBills || 0}</h3>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Verified Bills</span>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{report?.totalBills || 0}</h3>
           </div>
-          <div className="p-3 bg-white/15 text-white rounded-xl">
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl">
             <Receipt className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="p-5 bg-gradient-to-br from-fuchsia-500 to-pink-600 rounded-2xl flex items-center justify-between shadow-lg shadow-fuchsia-200 dark:shadow-fuchsia-950/50">
+        <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
-            <span className="text-[11px] font-bold text-fuchsia-100 uppercase">Avg. Revenue / Bill</span>
-            <h3 className="text-2xl font-bold text-white mt-1">Rs. {avgPerBill.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Avg. Revenue / Bill</span>
+            <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">Rs. {avgPerBill.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
           </div>
-          <div className="p-3 bg-white/15 text-white rounded-xl">
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <TrendingUp className="w-6 h-6" />
           </div>
         </div>

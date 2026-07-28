@@ -18,12 +18,22 @@ import {
   Area,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
+// Same per-category color mapping used on the Reports page, so a product
+// shows the same color everywhere in the app.
+const PALETTE = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'];
+const colorForCategory = (name: string) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return PALETTE[Math.abs(hash) % PALETTE.length];
+};
 
 interface AdminDashboardProps {
   setActiveTab: (tab: string) => void;
@@ -170,8 +180,8 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
               <AreaChart data={salesByDate}>
                 <defs>
                   <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.0} />
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.55} />
+                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0.03} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -180,7 +190,7 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1e1b4b', borderColor: '#4338ca', color: '#fff', borderRadius: '12px' }}
                 />
-                <Area type="monotone" dataKey="revenue" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                <Area type="monotone" dataKey="revenue" stroke="#7c3aed" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" dot={{ r: 3, fill: '#7c3aed' }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -210,7 +220,11 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1e1b4b', borderColor: '#4338ca', color: '#fff', borderRadius: '12px' }}
                 />
-                <Bar dataKey="weight" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="weight" radius={[6, 6, 0, 0]}>
+                  {topCategories.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={colorForCategory(entry.category)} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
