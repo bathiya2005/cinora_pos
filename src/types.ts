@@ -1,5 +1,10 @@
 export type Role = 'admin' | 'branch';
 
+// The two bill/receipt template groups. Each branch account belongs to
+// exactly one group, and editing a group's template in the admin panel only
+// affects branches assigned to that group.
+export type TemplateGroup = 'ayu' | 'cinora';
+
 export interface User {
   id: string;
   username: string;
@@ -11,9 +16,13 @@ export interface User {
   // branch's bills — independent of the global BillSettings template.
   logoUrl?: string;
   companyName?: string;
+  // Which bill template group (Ayu / Cinora) this branch prints receipts
+  // from. Defaults to 'ayu' when absent (older accounts).
+  templateGroup?: TemplateGroup;
 }
 
 export interface BillSettings {
+  group: TemplateGroup;
   companyName: string;
   tagline: string;
   logoUrl: string;
@@ -74,11 +83,17 @@ export interface Bill {
   totalNetWeight: number;
   createdBy: string;
   createdAt: string;
-  // Snapshot of the creating branch's own identity at the time of billing,
-  // so the receipt always shows that branch's name/logo even if it's later
-  // changed. Falls back to the global BillSettings when absent.
+  // Snapshot of the creating branch's own identity + bill template group at
+  // the time of billing, so the receipt always prints the same way even if
+  // the branch identity or the group's template is changed later.
+  // companyName/logoUrl fall back to the branch's own override when set,
+  // the rest come from that branch's assigned template group.
   companyName?: string;
   logoUrl?: string;
+  tagline?: string;
+  address?: string;
+  phoneNumbers?: string[];
+  footerNote?: string;
 }
 
 export interface AnalyticsSummary {

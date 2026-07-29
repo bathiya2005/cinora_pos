@@ -3,7 +3,9 @@ import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getDb, saveDb, refreshDb } from './db.js';
-import { User, Bill, BillItem, ExtraPayment } from '../types.js';
+import { User, Bill, BillItem, ExtraPayment, TemplateGroup } from '../types.js';
+
+const TEMPLATE_GROUPS: TemplateGroup[] = ['ayu', 'cinora'];
 
 const JWT_SECRET = process.env.JWT_SECRET || 'alona-pos-secret-jwt-key-2026';
 
@@ -256,7 +258,7 @@ export async function createApp() {
   // from its own Navbar, but editable centrally by the admin too.
   app.put('/api/users/:id/branding', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { logoUrl, companyName } = req.body;
+    const { logoUrl, companyName, templateGroup } = req.body;
 
     const db = getDb();
     const user = db.users.find((u) => u.id === id);
@@ -266,6 +268,12 @@ export async function createApp() {
 
     if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
     if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
+    if (templateGroup !== undefined) {
+      if (!TEMPLATE_GROUPS.includes(templateGroup)) {
+        return res.status(400).json({ error: 'Invalid bill template group.' });
+      }
+      user.templateGroup = templateGroup;
+    }
 
     await saveDb();
     return res.json(user);
@@ -286,27 +294,36 @@ export async function createApp() {
     return res.json({ success: true });
   });
 
-  // Bill Settings Routes
+  // Bill Settings Routes — one full template per group (Ayu / Cinora).
+  // Returns both groups' templates so the admin panel can switch between
+  // them without a round trip.
   app.get('/api/bill-settings', authenticateToken, (_req: Request, res: Response) => {
     const db = getDb();
-    return res.json(db.billSettings);
+    return res.json(db.billTemplates);
   });
 
   app.post('/api/bill-settings', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
-    const { companyName, logoUrl, phoneNumbers, address, footerNote } = req.body;
+    const { group, companyName, tagline, logoUrl, phoneNumbers, address, footerNote } = req.body;
     const db = getDb();
 
-    db.billSettings = {
-      companyName: companyName ?? db.billSettings.companyName,
-      logoUrl: logoUrl ?? db.billSettings.logoUrl,
-      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : db.billSettings.phoneNumbers,
-      address: address ?? db.billSettings.address,
-      footerNote: footerNote ?? db.billSettings.footerNote,
+    if (!TEMPLATE_GROUPS.includes(group)) {
+      return res.status(400).json({ error: 'A valid bill template group (ayu or cinora) is required.' });
+    }
+
+    const current = db.billTemplates[group as TemplateGroup];
+    db.billTemplates[group as TemplateGroup] = {
+      group,
+      companyName: companyName ?? current.companyName,
+      tagline: tagline ?? current.tagline,
+      logoUrl: logoUrl ?? current.logoUrl,
+      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : current.phoneNumbers,
+      address: address ?? current.address,
+      footerNote: footerNote ?? current.footerNote,
       updatedAt: new Date().toISOString(),
     };
 
     await saveDb();
-    return res.json(db.billSettings);
+    return res.json(db.billTemplates);
   });
 
   // Product Management Routes
@@ -473,6 +490,13 @@ export async function createApp() {
     const extraTotal = processedExtra.reduce((acc, e) => acc + e.amount, 0);
     const grandTotal = Number((totalItemsPrice + extraTotal).toFixed(2));
 
+    // Each branch is assigned to a bill template group (Ayu or Cinora).
+    // The branch's own name/logo override (if set) wins over the group
+    // template; everything else (tagline, address, phones, footer) always
+    // comes from that branch's group template.
+    const group: TemplateGroup = req.user!.templateGroup || 'ayu';
+    const template = db.billTemplates[group];
+
     const newBill: Bill = {
       id: `bill-${Date.now()}`,
       billNumber: billNum,
@@ -486,8 +510,12 @@ export async function createApp() {
       totalAmount: grandTotal,
       createdBy: req.user!.username,
       createdAt: new Date().toISOString(),
-      companyName: req.user!.companyName || undefined,
-      logoUrl: req.user!.logoUrl || undefined,
+      companyName: req.user!.companyName || template.companyName || undefined,
+      logoUrl: req.user!.logoUrl || template.logoUrl || undefined,
+      tagline: template.tagline || undefined,
+      address: template.address || undefined,
+      phoneNumbers: template.phoneNumbers?.length ? template.phoneNumbers : undefined,
+      footerNote: template.footerNote || undefined,
     };
 
     db.bills.unshift(newBill);

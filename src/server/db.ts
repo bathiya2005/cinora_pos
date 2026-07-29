@@ -1,6 +1,6 @@
 import { MongoClient, Db as MongoDatabase } from 'mongodb';
 import bcrypt from 'bcryptjs';
-import { User, BillSettings, Product, DeductionReason, Bill } from '../types.js';
+import { User, BillSettings, Product, DeductionReason, Bill, TemplateGroup } from '../types.js';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'alona_pos';
@@ -11,7 +11,9 @@ const STORE_DOC_ID = 'main';
 interface DatabaseSchema {
   users: User[];
   passwords: Record<string, string>; // userId -> passwordHash
-  billSettings: BillSettings;
+  // One full bill/receipt template per group (Ayu / Cinora). Editing one
+  // group's template only affects branches assigned to that group.
+  billTemplates: Record<TemplateGroup, BillSettings>;
   products: Product[];
   deductionReasons: DeductionReason[];
   bills: Bill[];
@@ -43,6 +45,7 @@ function buildSeedData(): DatabaseSchema {
       branchName: 'North Station',
       status: 'active',
       createdAt: new Date(Date.now() - 86400000 * 20).toISOString(),
+      templateGroup: 'ayu',
     },
     {
       id: 'user-branch-2',
@@ -51,6 +54,7 @@ function buildSeedData(): DatabaseSchema {
       branchName: 'South Market',
       status: 'active',
       createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
+      templateGroup: 'cinora',
     },
   ];
 
@@ -60,14 +64,27 @@ function buildSeedData(): DatabaseSchema {
     'user-branch-2': branch2PasswordHash,
   };
 
-  const initialSettings: BillSettings = {
-    companyName: 'UNIQUE OF CINNAMON',
-    tagline: 'Spice Exports (PVT) Ltd',
-    logoUrl: '',
-    phoneNumbers: ['+94 77 123 4567', '+94 31 223 4567'],
-    address: 'Negombo, Western Province, Sri Lanka',
-    footerNote: 'Thank you for trading with us! Weight verified by calibrated digital scales.',
-    updatedAt: new Date().toISOString(),
+  const initialBillTemplates: Record<TemplateGroup, BillSettings> = {
+    ayu: {
+      group: 'ayu',
+      companyName: 'Ayu Cinnamon',
+      tagline: '',
+      logoUrl: '',
+      phoneNumbers: ['0723807879'],
+      address: 'Akurassa Road, Yakkalamulla',
+      footerNote: '',
+      updatedAt: new Date().toISOString(),
+    },
+    cinora: {
+      group: 'cinora',
+      companyName: 'CINORA',
+      tagline: 'SPICE EXPORTS (PVT)',
+      logoUrl: '',
+      phoneNumbers: ['0707998799'],
+      address: 'Malidawa Collecting Center',
+      footerNote: '',
+      updatedAt: new Date().toISOString(),
+    },
   };
 
   const initialProducts: Product[] = [
@@ -274,7 +291,7 @@ function buildSeedData(): DatabaseSchema {
   return {
     users: initialUsers,
     passwords,
-    billSettings: initialSettings,
+    billTemplates: initialBillTemplates,
     products: initialProducts,
     deductionReasons: initialDeductions,
     bills: initialBills,

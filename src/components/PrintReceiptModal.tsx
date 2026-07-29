@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Bill } from '../types';
-import { usePos } from '../context/PosContext';
 import { Printer, X, Check, Receipt } from 'lucide-react';
 
 interface PrintReceiptModalProps {
@@ -9,7 +8,6 @@ interface PrintReceiptModalProps {
 }
 
 export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
-  const { billSettings } = usePos();
   const [printed, setPrinted] = useState(false);
 
   const handlePrint = () => {
@@ -19,20 +17,19 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
     }, 150);
   };
 
-  // Prefer the branch's own identity snapshot saved on the bill itself
-  // (set at billing time from that branch's Navbar logo), falling back to
-  // the global Template Settings for older bills that predate this feature.
-  const companyName = bill.companyName || billSettings?.companyName || 'Unique of Cinnamon';
-  const tagline = billSettings?.tagline || 'Spice Exports (PVT) Ltd';
-  const logoUrl = bill.logoUrl || billSettings?.logoUrl;
-  const phones = billSettings?.phoneNumbers && billSettings.phoneNumbers.length > 0
-    ? billSettings.phoneNumbers
-    : ['+94 77 123 4567'];
-  const address = billSettings?.address || 'Negombo, Sri Lanka';
-  const footerNote = billSettings?.footerNote || '';
+  // Everything is taken from the snapshot saved on the bill at billing time
+  // (that branch's own name/logo override, plus its assigned Ayu/Cinora
+  // template for tagline/address/phones/footer), so a bill always prints
+  // the same way even if the template is edited later.
+  const companyName = bill.companyName || 'Unique of Cinnamon';
+  const tagline = bill.tagline || '';
+  const logoUrl = bill.logoUrl;
+  const phones = bill.phoneNumbers && bill.phoneNumbers.length > 0 ? bill.phoneNumbers : [];
+  const address = bill.address || '';
+  const footerNote = bill.footerNote || '';
 
   const billDate = new Date(bill.createdAt);
-  const formattedDate = billDate.toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const formattedDate = billDate.toLocaleDateString('en-CA').replace(/-/g, ':'); // YYYY:MM:DD
   const formattedTime = billDate.toLocaleTimeString('en-GB', { hour12: false }); // HH:MM:SS
 
   return (
@@ -80,31 +77,27 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
               {address && (
                 <p className="text-xs text-slate-600 mt-1">{address}</p>
               )}
-              <p className="text-xs text-slate-600 mt-0.5">
-                {phones.join('  |  ')}
-              </p>
+              {phones.length > 0 && (
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {phones.join('  |  ')}
+                </p>
+              )}
             </div>
 
-            {/* Purchase Bill Title */}
-            <p className="text-center font-extrabold text-sm tracking-widest mb-3">PURCHASE BILL</p>
-
-            {/* Bill Info Metadata */}
+            {/* Bill Info Metadata: BILL NO / DATE / TIME on one row */}
             <div className="text-xs mb-3 pb-3 border-b border-slate-300 space-y-1">
-              <div className="flex justify-between">
-                <span><span className="text-slate-600">BILL NO:</span> <span className="font-bold">{bill.billNumber}</span></span>
-                <span><span className="text-slate-600">DATE:</span> <span className="font-medium">{formattedDate}</span></span>
-              </div>
-              <div className="flex justify-between">
-                <span><span className="text-slate-600">TIME:</span> <span className="font-medium">{formattedTime}</span></span>
-                <span><span className="text-slate-600">BRANCH:</span> <span className="font-medium">{bill.branchName}</span></span>
+              <div className="flex justify-between gap-2">
+                <span><span className="text-slate-600">BILL NO</span> <span className="font-bold">{bill.billNumber}</span></span>
+                <span><span className="text-slate-600">DATE</span> <span className="font-medium">{formattedDate}</span></span>
+                <span><span className="text-slate-600">TIME</span> <span className="font-medium">{formattedTime}</span></span>
               </div>
               <div>
                 <span className="text-slate-600">CUSTOMER: </span>
-                <span className="font-semibold">{bill.customerName || '-'}</span>
+                <span className="font-semibold">{bill.customerName || ''}</span>
               </div>
               <div>
                 <span className="text-slate-600">CONTACT: </span>
-                <span className="font-medium">{bill.customerContact || '-'}</span>
+                <span className="font-medium">{bill.customerContact || ''}</span>
               </div>
             </div>
 
@@ -114,7 +107,7 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
                 <thead>
                   <tr className="border-b-2 border-slate-800 text-slate-800 uppercase font-bold">
                     <th className="py-1">Grade</th>
-                    <th className="py-1 text-right">Qty (kg)</th>
+                    <th className="py-1 text-right">Qty</th>
                     <th className="py-1 text-right">Price</th>
                     <th className="py-1 text-right">Amount</th>
                   </tr>

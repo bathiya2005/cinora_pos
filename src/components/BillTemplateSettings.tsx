@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { usePos } from '../context/PosContext';
-import { User } from '../types';
+import { User, TemplateGroup } from '../types';
 import { FileText, Image as ImageIcon, Phone, MapPin, Plus, Trash2, Save, ShieldCheck, Store } from 'lucide-react';
 
+const GROUP_LABELS: Record<TemplateGroup, string> = {
+  ayu: 'Ayu',
+  cinora: 'Cinora',
+};
+
 export function BillTemplateSettings() {
-  const { billSettings, updateSettings, updateBranchBranding, addToast } = usePos();
+  const { billTemplates, updateSettings, updateBranchBranding, addToast } = usePos();
+
+  // Which of the two bill template groups (Ayu / Cinora) is being edited.
+  // Editing one only affects branches assigned to that group.
+  const [activeGroup, setActiveGroup] = useState<TemplateGroup>('ayu');
 
   const [companyName, setCompanyName] = useState('');
   const [tagline, setTagline] = useState('');
@@ -19,6 +28,7 @@ export function BillTemplateSettings() {
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [branchCompanyName, setBranchCompanyName] = useState('');
   const [branchLogoUrl, setBranchLogoUrl] = useState('');
+  const [branchTemplateGroup, setBranchTemplateGroup] = useState<TemplateGroup>('ayu');
   const [savingBranch, setSavingBranch] = useState(false);
 
   const fetchBranches = async () => {
@@ -48,6 +58,7 @@ export function BillTemplateSettings() {
     if (branch) {
       setBranchCompanyName(branch.companyName || branch.branchName || '');
       setBranchLogoUrl(branch.logoUrl || '');
+      setBranchTemplateGroup(branch.templateGroup || 'ayu');
     }
   }, [selectedBranchId, branches]);
 
@@ -74,21 +85,23 @@ export function BillTemplateSettings() {
     const ok = await updateBranchBranding(selectedBranchId, {
       companyName: branchCompanyName.trim(),
       logoUrl: branchLogoUrl,
+      templateGroup: branchTemplateGroup,
     });
     setSavingBranch(false);
     if (ok) fetchBranches();
   };
 
   useEffect(() => {
-    if (billSettings) {
-      setCompanyName(billSettings.companyName || '');
-      setTagline(billSettings.tagline || '');
-      setLogoUrl(billSettings.logoUrl || '');
-      setPhoneNumbers(billSettings.phoneNumbers?.length ? billSettings.phoneNumbers : ['']);
-      setAddress(billSettings.address || '');
-      setFooterNote(billSettings.footerNote || '');
+    const settings = billTemplates?.[activeGroup];
+    if (settings) {
+      setCompanyName(settings.companyName || '');
+      setTagline(settings.tagline || '');
+      setLogoUrl(settings.logoUrl || '');
+      setPhoneNumbers(settings.phoneNumbers?.length ? settings.phoneNumbers : ['']);
+      setAddress(settings.address || '');
+      setFooterNote(settings.footerNote || '');
     }
-  }, [billSettings]);
+  }, [billTemplates, activeGroup]);
 
   const handleAddPhone = () => {
     setPhoneNumbers((prev) => [...prev, '']);
@@ -123,7 +136,7 @@ export function BillTemplateSettings() {
     e.preventDefault();
     const cleanPhones = phoneNumbers.map((p) => p.trim()).filter((p) => p.length > 0);
 
-    await updateSettings({
+    await updateSettings(activeGroup, {
       companyName: companyName.trim(),
       tagline: tagline.trim(),
       logoUrl: logoUrl.trim(),
@@ -142,7 +155,7 @@ export function BillTemplateSettings() {
             <FileText className="w-6 h-6 text-indigo-600 dark:text-indigo-400" /> Bill Receipt Template Customization
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">
-            Global receipt header, logo, phone numbers, and footer branding across all branch printed bills.
+            Ayu and Cinora each have their own full bill template. Editing one only changes bills printed by branches assigned to that group.
           </p>
         </div>
       </div>
@@ -192,6 +205,19 @@ export function BillTemplateSettings() {
             </div>
 
             <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Bill Template Group</label>
+              <select
+                value={branchTemplateGroup}
+                onChange={(e) => setBranchTemplateGroup(e.target.value as TemplateGroup)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="ayu">Ayu</option>
+                <option value="cinora">Cinora</option>
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">Which full bill template (Ayu or Cinora) this branch prints from.</p>
+            </div>
+
+            <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Branch Logo</label>
               <div className="flex items-center gap-2">
                 {branchLogoUrl && (
@@ -224,13 +250,35 @@ export function BillTemplateSettings() {
         )}
       </div>
 
+      {/* Bill Template Group Switch — Ayu / Cinora each have their own,
+          fully independent full bill template. Editing one never touches
+          the other. */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl p-4 shadow-md">
+        <div className="flex items-center gap-2">
+          {(['ayu', 'cinora'] as TemplateGroup[]).map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setActiveGroup(g)}
+              className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-bold transition-colors border ${
+                activeGroup === g
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-md'
+                  : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {GROUP_LABELS[g]} Bill Template
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Settings Form (7 cols) */}
         <form onSubmit={handleSubmit} className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl p-6 shadow-md space-y-5">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <h3 className="font-bold text-slate-900 dark:text-white text-base">Receipt Metadata Fields</h3>
             <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-bold px-2.5 py-0.5 bg-indigo-50 dark:bg-indigo-950/80 rounded-full border border-indigo-100 dark:border-indigo-900">
-              Global Admin Configuration
+              {GROUP_LABELS[activeGroup]} Template Only
             </span>
           </div>
 
@@ -361,7 +409,7 @@ export function BillTemplateSettings() {
             type="submit"
             className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center justify-center gap-2 transition-all"
           >
-            <Save className="w-4 h-4" /> Save Receipt Template Settings
+            <Save className="w-4 h-4" /> Save {GROUP_LABELS[activeGroup]} Bill Template
           </button>
         </form>
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, BillSettings, Product, DeductionReason, Bill } from '../types.js';
+import { User, BillSettings, Product, DeductionReason, Bill, TemplateGroup } from '../types.js';
 
 interface ToastMessage {
   id: string;
@@ -17,7 +17,7 @@ interface PosContextType {
   logout: () => Promise<void>;
   
   // Data
-  billSettings: BillSettings | null;
+  billTemplates: Record<TemplateGroup, BillSettings> | null;
   products: Product[];
   deductionReasons: DeductionReason[];
   bills: Bill[];
@@ -27,7 +27,7 @@ interface PosContextType {
   addToast: (text: string, type?: 'success' | 'error' | 'info') => void;
   removeToast: (id: string) => void;
   fetchSettings: () => Promise<void>;
-  updateSettings: (settings: Partial<BillSettings>) => Promise<boolean>;
+  updateSettings: (group: TemplateGroup, settings: Partial<BillSettings>) => Promise<boolean>;
   fetchProducts: () => Promise<void>;
   addProduct: (p: Omit<Product, 'id' | 'createdAt'>) => Promise<boolean>;
   updateProduct: (id: string, p: Partial<Product>) => Promise<boolean>;
@@ -40,7 +40,7 @@ interface PosContextType {
   createBill: (data: { customerName?: string; customerContact?: string; items: any[]; extraPayments: any[] }) => Promise<Bill | null>;
   deleteBill: (id: string) => Promise<boolean>;
   updateMyBranding: (data: { logoUrl?: string; companyName?: string }) => Promise<boolean>;
-  updateBranchBranding: (userId: string, data: { logoUrl?: string; companyName?: string }) => Promise<boolean>;
+  updateBranchBranding: (userId: string, data: { logoUrl?: string; companyName?: string; templateGroup?: TemplateGroup }) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -52,7 +52,7 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
-  const [billSettings, setBillSettings] = useState<BillSettings | null>(null);
+  const [billTemplates, setBillTemplates] = useState<Record<TemplateGroup, BillSettings> | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [deductionReasons, setDeductionReasons] = useState<DeductionReason[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
@@ -173,7 +173,7 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
 
   // Admin: edit a SPECIFIC branch's own bill/Navbar identity (name + logo)
   // from the Template Settings page, e.g. cinora's or Ayu's.
-  const updateBranchBranding = async (userId: string, data: { logoUrl?: string; companyName?: string }) => {
+  const updateBranchBranding = async (userId: string, data: { logoUrl?: string; companyName?: string; templateGroup?: TemplateGroup }) => {
     try {
       const res = await fetch(`/api/users/${userId}/branding`, {
         method: 'PUT',
@@ -217,24 +217,24 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch('/api/bill-settings', { headers: getHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setBillSettings(data);
+        setBillTemplates(data);
       }
     } catch {
       // ignore
     }
   };
 
-  const updateSettings = async (newSettings: Partial<BillSettings>) => {
+  const updateSettings = async (group: TemplateGroup, newSettings: Partial<BillSettings>) => {
     try {
       const res = await fetch('/api/bill-settings', {
         method: 'POST',
         headers: getHeaders(),
-        body: JSON.stringify(newSettings),
+        body: JSON.stringify({ group, ...newSettings }),
       });
       if (res.ok) {
         const updated = await res.json();
-        setBillSettings(updated);
-        addToast('Bill template settings saved!', 'success');
+        setBillTemplates(updated);
+        addToast(`${group === 'ayu' ? 'Ayu' : 'Cinora'} bill template saved!`, 'success');
         return true;
       } else {
         const err = await res.json();
@@ -450,7 +450,7 @@ export function PosProvider({ children }: { children: React.ReactNode }) {
         toggleTheme,
         login,
         logout,
-        billSettings,
+        billTemplates,
         products,
         deductionReasons,
         bills,
