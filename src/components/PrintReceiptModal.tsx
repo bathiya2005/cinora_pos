@@ -57,31 +57,36 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             id="printable-receipt"
             className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-mono text-sm leading-relaxed border-2 border-slate-800"
           >
-            {/* Business Header */}
-            <div className="text-center pb-3 mb-3 border-b-2 border-slate-800">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt={companyName}
-                  className="h-14 mx-auto object-contain mb-2 max-w-[180px]"
-                />
-              ) : (
-                <div className="w-12 h-12 bg-emerald-700 text-white rounded-full flex items-center justify-center mx-auto mb-2 font-bold text-xl">
-                  A
-                </div>
-              )}
-              <h2 className="font-extrabold text-xl text-slate-900 uppercase tracking-wide">{companyName}</h2>
-              {tagline && (
-                <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide mt-0.5">{tagline}</p>
-              )}
-              {address && (
-                <p className="text-xs text-slate-600 mt-1">{address}</p>
-              )}
-              {phones.length > 0 && (
-                <p className="text-xs text-slate-600 mt-0.5">
-                  {phones.join('  |  ')}
-                </p>
-              )}
+            {/* Business Header — logo top-left, name/details centered next to it */}
+            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[3.25rem_1fr_3.25rem] items-start gap-2">
+              <div className="pt-0.5">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt={companyName}
+                    className="h-12 w-12 object-contain"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-xl">
+                    {companyName.trim().charAt(0).toUpperCase() || 'A'}
+                  </div>
+                )}
+              </div>
+              <div className="text-center">
+                <h2 className="font-extrabold text-xl text-slate-900 uppercase tracking-wide">{companyName}</h2>
+                {tagline && (
+                  <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide mt-0.5">{tagline}</p>
+                )}
+                {address && (
+                  <p className="text-xs text-slate-600 mt-1">{address}</p>
+                )}
+                {phones.length > 0 && (
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {phones.join('  |  ')}
+                  </p>
+                )}
+              </div>
+              <div />
             </div>
 
             {/* Bill Info Metadata: BILL NO / DATE / TIME on one row */}
