@@ -311,6 +311,7 @@ export async function createApp() {
     }
 
     const current = db.billTemplates[group as TemplateGroup];
+    const previous = current;
     db.billTemplates[group as TemplateGroup] = {
       group,
       companyName: companyName ?? current.companyName,
@@ -322,7 +323,13 @@ export async function createApp() {
       updatedAt: new Date().toISOString(),
     };
 
-    await saveDb();
+    const ok = await saveDb();
+    if (!ok) {
+      // Roll back the in-memory change so it doesn't look saved on screen
+      // when it never reached the database.
+      db.billTemplates[group as TemplateGroup] = previous;
+      return res.status(503).json({ error: 'Could not reach the database. Please try saving again.' });
+    }
     return res.json(db.billTemplates);
   });
 
@@ -519,7 +526,12 @@ export async function createApp() {
     };
 
     db.bills.unshift(newBill);
-    await saveDb();
+    const ok = await saveDb();
+    if (!ok) {
+      db.bills.shift(); // roll back — don't hand the client a bill that isn't actually saved
+      db.billCounter--; // reuse the same bill number on the next attempt
+      return res.status(503).json({ error: 'Could not reach the database. Please try finalizing the bill again.' });
+    }
 
     return res.status(201).json(newBill);
   });

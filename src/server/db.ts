@@ -300,6 +300,43 @@ function buildSeedData(): DatabaseSchema {
 }
 
 /**
+ * Backfills documents that were saved before the Ayu/Cinora bill-template
+ * migration (commit "bill template change"). Older documents have a single
+ * `billSettings` object (or may be missing billTemplates/templateGroup
+ * entirely) instead of the current `billTemplates: { ayu, cinora }` shape.
+ * Without this, any route touching `db.billTemplates[group]` (saving the
+ * template, or finalizing a bill) throws on an undefined object and fails
+ * silently from the UI's point of view. Returns true if it changed anything
+ * (caller should persist the result).
+ */
+function migrateLegacyBillTemplates(data: any): boolean {
+  let migrated = false;
+
+  if (!data.billTemplates || !data.billTemplates.ayu || !data.billTemplates.cinora) {
+    const seedTemplates = buildSeedData().billTemplates;
+    const legacy = data.billSettings; // pre-migration single global template, if present
+
+    data.billTemplates = {
+      ayu: legacy ? { ...seedTemplates.ayu, ...legacy, group: 'ayu' } : seedTemplates.ayu,
+      cinora: seedTemplates.cinora,
+    };
+    delete data.billSettings;
+    migrated = true;
+  }
+
+  if (Array.isArray(data.users)) {
+    for (const u of data.users) {
+      if (u.role === 'branch' && !u.templateGroup) {
+        u.templateGroup = 'ayu';
+        migrated = true;
+      }
+    }
+  }
+
+  return migrated;
+}
+
+/**
  * Connects to MongoDB (once per warm process/instance), loads the persisted
  * store document into memory, or seeds and inserts default data if the
  * database is empty. Must be awaited once before the Express server starts
@@ -319,6 +356,11 @@ export async function connectDb(): Promise<void> {
     const { _id, ...rest } = existing;
     dbMemory = rest as DatabaseSchema;
     console.log('MongoDB: loaded existing Alona POS data store.');
+
+    if (migrateLegacyBillTemplates(dbMemory)) {
+      console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+      await saveDb();
+    }
   } else {
     dbMemory = buildSeedData();
     await collection.insertOne({ _id: STORE_DOC_ID, ...dbMemory });
@@ -346,6 +388,11 @@ export async function refreshDb(): Promise<void> {
   if (existing) {
     const { _id, ...rest } = existing;
     dbMemory = rest as DatabaseSchema;
+
+    if (migrateLegacyBillTemplates(dbMemory)) {
+      console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+      await saveDb();
+    }
   }
 }
 
@@ -363,13 +410,21 @@ export function getDb(): DatabaseSchema {
  * otherwise on serverless platforms the function can freeze/terminate right
  * after the response is sent, before the write actually reaches MongoDB
  * (data would then look like it "reverted" a moment later).
+ *
+ * Returns true on a confirmed write, false if it failed (e.g. MongoDB
+ * unreachable). Previously this only logged failures to the server console,
+ * so a failed save could still return a 200/201 "success" response to the
+ * browser — the UI would show "saved!" for a change that never persisted,
+ * and it would look reverted the next time the page loaded fresh data.
  */
-export async function saveDb(): Promise<void> {
-  if (!dbMemory || !mongoDb) return;
+export async function saveDb(): Promise<boolean> {
+  if (!dbMemory || !mongoDb) return false;
   const snapshot = dbMemory;
   try {
     await mongoDb.collection(STORE_COLLECTION).updateOne({ _id: STORE_DOC_ID }, { $set: snapshot }, { upsert: true });
+    return true;
   } catch (e) {
     console.error('MongoDB: error saving data store:', e);
+    return false;
   }
 }
