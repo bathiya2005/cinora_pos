@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { usePos } from '../context/PosContext';
-import { BarChart3, Download, Scale, DollarSign, Receipt, Filter, TrendingUp, Store } from 'lucide-react';
+import { BarChart3, Download, Scale, DollarSign, Receipt, Filter, TrendingUp, Store, CheckSquare, Square, Package } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -42,6 +42,11 @@ export function ReportsAnalytics() {
   const [branches, setBranches] = useState<string[]>([]);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
+  const toggleProduct = (cat: string) => {
+    setSelectedProducts((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  };
 
   const toDateInput = (d: Date) => d.toISOString().split('T')[0];
 
@@ -135,6 +140,7 @@ export function ReportsAnalytics() {
   const monthlyTrend = report?.monthlyTrend || [];
   const categoryMonthlyTrend = report?.categoryMonthlyTrend || [];
   const branchCategoryBreakdown = report?.branchCategoryBreakdown || [];
+  const productAnalysis: any[] = report?.productAnalysis || [];
 
   const avgPerBill = report?.totalBills > 0 ? (report.totalRevenue / report.totalBills) : 0;
 
@@ -493,6 +499,153 @@ export function ReportsAnalytics() {
           )}
         </>
       )}
+
+      {/* Product-Wise Analysis — every product, day-wise & month-wise averages */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+            <Package className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Product-Wise Analysis (All Products)
+          </h3>
+          {selectedProducts.length > 0 && (
+            <button
+              onClick={() => setSelectedProducts([])}
+              className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+            >
+              Clear Selection ({selectedProducts.length})
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-slate-600 dark:text-slate-500 -mt-2">
+          Click a product to select it — click more than one to see their combined performance below. Daily average = total ÷ days the product actually sold in the selected range. Monthly average = total ÷ active months in the last 12 months.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-500 uppercase font-bold border-b border-slate-300 dark:border-slate-800">
+                <th className="p-3 w-8"></th>
+                <th className="p-3">Product</th>
+                <th className="p-3 text-right">Total Wt (kg)</th>
+                <th className="p-3 text-right">Total Revenue</th>
+                <th className="p-3 text-right">Avg Price / kg</th>
+                <th className="p-3 text-right">Daily Avg (kg)</th>
+                <th className="p-3 text-right">Monthly Avg (kg)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {productAnalysis.map((p) => {
+                const isSelected = selectedProducts.includes(p.category);
+                return (
+                  <tr
+                    key={p.category}
+                    onClick={() => toggleProduct(p.category)}
+                    className={`cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/40'}`}
+                  >
+                    <td className="p-3">
+                      {isSelected ? (
+                        <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      ) : (
+                        <Square className="w-4 h-4 text-slate-300 dark:text-slate-700" />
+                      )}
+                    </td>
+                    <td className="p-3 font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: colorForCategory(p.category) }} />
+                      {p.category}
+                    </td>
+                    <td className="p-3 text-right font-bold text-amber-600 dark:text-amber-400">{p.totalWeight.toFixed(2)} kg</td>
+                    <td className="p-3 text-right font-black text-indigo-600 dark:text-indigo-400">Rs. {p.totalRevenue.toFixed(2)}</td>
+                    <td className="p-3 text-right text-slate-700 dark:text-slate-300">Rs. {p.avgPricePerKg.toFixed(2)}</td>
+                    <td className="p-3 text-right text-slate-700 dark:text-slate-300">{p.dailyAvgWeight.toFixed(2)} kg</td>
+                    <td className="p-3 text-right text-slate-700 dark:text-slate-300">{p.monthlyAvgWeight.toFixed(2)} kg</td>
+                  </tr>
+                );
+              })}
+
+              {productAnalysis.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 text-xs">
+                    No product sales data available for selected filter range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Combined performance of selected products */}
+        {selectedProducts.length > 0 && (() => {
+          const selected = productAnalysis.filter((p) => selectedProducts.includes(p.category));
+          const sumWeight = selected.reduce((s, p) => s + p.totalWeight, 0);
+          const sumRevenue = selected.reduce((s, p) => s + p.totalRevenue, 0);
+          const sumDailyAvg = selected.reduce((s, p) => s + p.dailyAvgWeight, 0);
+          const sumMonthlyAvg = selected.reduce((s, p) => s + p.monthlyAvgWeight, 0);
+          const combinedAvgPrice = sumWeight > 0 ? sumRevenue / sumWeight : 0;
+
+          return (
+            <div className="mt-2 p-5 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-2xl space-y-4">
+              <h4 className="font-bold text-indigo-900 dark:text-indigo-200 text-xs uppercase tracking-wide">
+                Combined Performance — {selected.length} Product{selected.length > 1 ? 's' : ''} Selected
+              </h4>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Total Weight</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumWeight.toFixed(2)} kg</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Total Revenue</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">Rs. {sumRevenue.toFixed(2)}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Avg Price / kg</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">Rs. {combinedAvgPrice.toFixed(2)}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Combined Daily Avg</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumDailyAvg.toFixed(2)} kg</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Combined Monthly Avg</p>
+                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumMonthlyAvg.toFixed(2)} kg</p>
+                </div>
+              </div>
+
+              {/* Per-product detail breakdown within the selection */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead>
+                    <tr className="text-indigo-800/70 dark:text-indigo-300/70 uppercase font-bold border-b border-indigo-200 dark:border-indigo-900">
+                      <th className="py-2">Product</th>
+                      <th className="py-2 text-right">Daily Avg (kg)</th>
+                      <th className="py-2 text-right">Daily Avg (Rs.)</th>
+                      <th className="py-2 text-right">Monthly Avg (kg)</th>
+                      <th className="py-2 text-right">Monthly Avg (Rs.)</th>
+                      <th className="py-2 text-right">Active Days</th>
+                      <th className="py-2 text-right">Active Months</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-indigo-100 dark:divide-indigo-900/50">
+                    {selected.map((p) => (
+                      <tr key={p.category}>
+                        <td className="py-2 font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: colorForCategory(p.category) }} />
+                          {p.category}
+                        </td>
+                        <td className="py-2 text-right text-slate-700 dark:text-slate-300">{p.dailyAvgWeight.toFixed(2)} kg</td>
+                        <td className="py-2 text-right text-slate-700 dark:text-slate-300">Rs. {p.dailyAvgRevenue.toFixed(2)}</td>
+                        <td className="py-2 text-right text-slate-700 dark:text-slate-300">{p.monthlyAvgWeight.toFixed(2)} kg</td>
+                        <td className="py-2 text-right text-slate-700 dark:text-slate-300">Rs. {p.monthlyAvgRevenue.toFixed(2)}</td>
+                        <td className="py-2 text-right text-slate-500">{p.activeDays}</td>
+                        <td className="py-2 text-right text-slate-500">{p.activeMonths}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
 
       {/* Aggregate Category Summary Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl p-6 shadow-md space-y-4">

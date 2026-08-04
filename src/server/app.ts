@@ -3,9 +3,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getDb, saveDb, refreshDb } from './db.js';
-import { User, Bill, BillItem, ExtraPayment, TemplateGroup } from '../types.js';
-
-const TEMPLATE_GROUPS: TemplateGroup[] = ['ayu', 'cinora'];
+import { User, Bill, BillItem, ExtraPayment } from '../types.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'alona-pos-secret-jwt-key-2026';
 
@@ -258,7 +256,7 @@ export async function createApp() {
   // from its own Navbar, but editable centrally by the admin too.
   app.put('/api/users/:id/branding', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { logoUrl, companyName, templateGroup } = req.body;
+    const { logoUrl, companyName } = req.body;
 
     const db = getDb();
     const user = db.users.find((u) => u.id === id);
@@ -268,12 +266,6 @@ export async function createApp() {
 
     if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
     if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
-    if (templateGroup !== undefined) {
-      if (!TEMPLATE_GROUPS.includes(templateGroup)) {
-        return res.status(400).json({ error: 'Invalid bill template group.' });
-      }
-      user.templateGroup = templateGroup;
-    }
 
     await saveDb();
     return res.json(user);
@@ -294,43 +286,27 @@ export async function createApp() {
     return res.json({ success: true });
   });
 
-  // Bill Settings Routes — one full template per group (Ayu / Cinora).
-  // Returns both groups' templates so the admin panel can switch between
-  // them without a round trip.
+  // Bill Settings Routes
   app.get('/api/bill-settings', authenticateToken, (_req: Request, res: Response) => {
     const db = getDb();
-    return res.json(db.billTemplates);
+    return res.json(db.billSettings);
   });
 
   app.post('/api/bill-settings', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
-    const { group, companyName, tagline, logoUrl, phoneNumbers, address, footerNote } = req.body;
+    const { companyName, logoUrl, phoneNumbers, address, footerNote } = req.body;
     const db = getDb();
 
-    if (!TEMPLATE_GROUPS.includes(group)) {
-      return res.status(400).json({ error: 'A valid bill template group (ayu or cinora) is required.' });
-    }
-
-    const current = db.billTemplates[group as TemplateGroup];
-    const previous = current;
-    db.billTemplates[group as TemplateGroup] = {
-      group,
-      companyName: companyName ?? current.companyName,
-      tagline: tagline ?? current.tagline,
-      logoUrl: logoUrl ?? current.logoUrl,
-      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : current.phoneNumbers,
-      address: address ?? current.address,
-      footerNote: footerNote ?? current.footerNote,
+    db.billSettings = {
+      companyName: companyName ?? db.billSettings.companyName,
+      logoUrl: logoUrl ?? db.billSettings.logoUrl,
+      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : db.billSettings.phoneNumbers,
+      address: address ?? db.billSettings.address,
+      footerNote: footerNote ?? db.billSettings.footerNote,
       updatedAt: new Date().toISOString(),
     };
 
-    const ok = await saveDb();
-    if (!ok) {
-      // Roll back the in-memory change so it doesn't look saved on screen
-      // when it never reached the database.
-      db.billTemplates[group as TemplateGroup] = previous;
-      return res.status(503).json({ error: 'Could not reach the database. Please try saving again.' });
-    }
-    return res.json(db.billTemplates);
+    await saveDb();
+    return res.json(db.billSettings);
   });
 
   // Product Management Routes
@@ -497,13 +473,6 @@ export async function createApp() {
     const extraTotal = processedExtra.reduce((acc, e) => acc + e.amount, 0);
     const grandTotal = Number((totalItemsPrice + extraTotal).toFixed(2));
 
-    // Each branch is assigned to a bill template group (Ayu or Cinora).
-    // The branch's own name/logo override (if set) wins over the group
-    // template; everything else (tagline, address, phones, footer) always
-    // comes from that branch's group template.
-    const group: TemplateGroup = req.user!.templateGroup || 'ayu';
-    const template = db.billTemplates[group];
-
     const newBill: Bill = {
       id: `bill-${Date.now()}`,
       billNumber: billNum,
@@ -517,21 +486,12 @@ export async function createApp() {
       totalAmount: grandTotal,
       createdBy: req.user!.username,
       createdAt: new Date().toISOString(),
-      companyName: req.user!.companyName || template.companyName || undefined,
-      logoUrl: req.user!.logoUrl || template.logoUrl || undefined,
-      tagline: template.tagline || undefined,
-      address: template.address || undefined,
-      phoneNumbers: template.phoneNumbers?.length ? template.phoneNumbers : undefined,
-      footerNote: template.footerNote || undefined,
+      companyName: req.user!.companyName || undefined,
+      logoUrl: req.user!.logoUrl || undefined,
     };
 
     db.bills.unshift(newBill);
-    const ok = await saveDb();
-    if (!ok) {
-      db.bills.shift(); // roll back — don't hand the client a bill that isn't actually saved
-      db.billCounter--; // reuse the same bill number on the next attempt
-      return res.status(503).json({ error: 'Could not reach the database. Please try finalizing the bill again.' });
-    }
+    await saveDb();
 
     return res.status(201).json(newBill);
   });
@@ -645,6 +605,8 @@ export async function createApp() {
     const categoryByDateMap: Record<string, Record<string, number>> = {};
     // branchName -> category -> { weight, revenue }, for admin's per-branch product breakdown
     const branchCategoryMap: Record<string, Record<string, { weight: number; revenue: number }>> = {};
+    // category -> set of dates it had a sale on (within the filtered range) — used for "daily average"
+    const categoryActiveDays: Record<string, Set<string>> = {};
 
     bills.forEach((b) => {
       totalRevenue += b.totalAmount;
@@ -677,6 +639,9 @@ export async function createApp() {
         categoryMap[cat].revenue += item.lineTotal;
 
         categoryByDateMap[dateStr][cat] = (categoryByDateMap[dateStr][cat] || 0) + item.netWeight;
+
+        if (!categoryActiveDays[cat]) categoryActiveDays[cat] = new Set();
+        categoryActiveDays[cat].add(dateStr);
 
         if (!branchCategoryMap[b.branchName][cat]) {
           branchCategoryMap[b.branchName][cat] = { weight: 0, revenue: 0 };
@@ -719,6 +684,10 @@ export async function createApp() {
     // role/branch-scoped bill set, independent of the daily date filter.
     const monthlyMap: Record<string, { month: string; revenue: number; weight: number }> = {};
     const monthlyCategoryMap: Record<string, Record<string, number>> = {};
+    // category -> total weight/revenue across the last 12 months, and the
+    // set of months it had at least one sale in — used for "monthly average"
+    const categoryMonthlyTotals: Record<string, { weight: number; revenue: number }> = {};
+    const categoryActiveMonths: Record<string, Set<string>> = {};
     scopedBills.forEach((b) => {
       const d = new Date(b.createdAt);
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -730,6 +699,13 @@ export async function createApp() {
       b.items.forEach((item) => {
         const cat = item.category || 'General';
         monthlyCategoryMap[monthKey][cat] = (monthlyCategoryMap[monthKey][cat] || 0) + item.netWeight;
+
+        if (!categoryMonthlyTotals[cat]) categoryMonthlyTotals[cat] = { weight: 0, revenue: 0 };
+        categoryMonthlyTotals[cat].weight += item.netWeight;
+        categoryMonthlyTotals[cat].revenue += item.lineTotal;
+
+        if (!categoryActiveMonths[cat]) categoryActiveMonths[cat] = new Set();
+        categoryActiveMonths[cat].add(monthKey);
       });
     });
 
@@ -765,6 +741,39 @@ export async function createApp() {
             .sort((a, b) => b.weight - a.weight),
         }));
 
+    // Full product-wise analysis — EVERY product (not just the top 6 used
+    // for chart legends), with day-wise and month-wise averages and the
+    // true average price/kg (total revenue ÷ total weight for that product).
+    const allProductNames = new Set<string>([
+      ...Object.keys(categoryMap),
+      ...Object.keys(categoryMonthlyTotals),
+    ]);
+
+    const productAnalysis = Array.from(allProductNames)
+      .map((cat) => {
+        const filteredWeight = categoryMap[cat]?.weight || 0;
+        const filteredRevenue = categoryMap[cat]?.revenue || 0;
+        const activeDays = categoryActiveDays[cat]?.size || 0;
+
+        const monthWeight = categoryMonthlyTotals[cat]?.weight || 0;
+        const monthRevenue = categoryMonthlyTotals[cat]?.revenue || 0;
+        const activeMonths = categoryActiveMonths[cat]?.size || 0;
+
+        return {
+          category: cat,
+          totalWeight: Number(filteredWeight.toFixed(2)),
+          totalRevenue: Number(filteredRevenue.toFixed(2)),
+          avgPricePerKg: filteredWeight > 0 ? Number((filteredRevenue / filteredWeight).toFixed(2)) : 0,
+          activeDays,
+          dailyAvgWeight: activeDays > 0 ? Number((filteredWeight / activeDays).toFixed(2)) : 0,
+          dailyAvgRevenue: activeDays > 0 ? Number((filteredRevenue / activeDays).toFixed(2)) : 0,
+          activeMonths,
+          monthlyAvgWeight: activeMonths > 0 ? Number((monthWeight / activeMonths).toFixed(2)) : 0,
+          monthlyAvgRevenue: activeMonths > 0 ? Number((monthRevenue / activeMonths).toFixed(2)) : 0,
+        };
+      })
+      .sort((a, b) => b.totalWeight - a.totalWeight);
+
     return res.json({
       totalBills,
       totalRevenue: Number(totalRevenue.toFixed(2)),
@@ -777,6 +786,7 @@ export async function createApp() {
       monthlyTrend,
       categoryMonthlyTrend,
       branchCategoryBreakdown,
+      productAnalysis,
     });
   });
 

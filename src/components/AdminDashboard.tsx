@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Plus,
   FileText,
+  Filter,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -43,15 +44,37 @@ interface AdminDashboardProps {
 export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardProps) {
   const { bills } = usePos();
   const [reportsData, setReportsData] = useState<any>(null);
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [branches, setBranches] = useState<string[]>([]);
+
+  // Load branch list for the filter dropdown
+  useEffect(() => {
+    fetch('/api/users', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('alona_token')}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((users: any[]) => {
+        const names = Array.from(
+          new Set(users.filter((u) => u.role === 'branch' && u.branchName).map((u) => u.branchName))
+        );
+        setBranches(names);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
-    fetch('/api/reports', {
+    const params = new URLSearchParams();
+    if (selectedBranch !== 'all') params.append('branchName', selectedBranch);
+    fetch(`/api/reports?${params.toString()}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('alona_token')}` },
     })
       .then((res) => res.json())
       .then((data) => setReportsData(data))
       .catch(() => {});
-  }, [bills]);
+  }, [bills, selectedBranch]);
+
+  // Recent Transactions feed respects the same branch filter as the rest of the dashboard
+  const visibleBills = selectedBranch === 'all' ? bills : bills.filter((b) => b.branchName === selectedBranch);
 
   const totalRevenue = reportsData?.totalRevenue || 0;
   const totalWeight = reportsData?.totalWeight || 0;
@@ -83,11 +106,44 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
             <Users className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> + Branch Account
           </button>
           <button
-            onClick={() => setActiveTab('billing')}
+            onClick={() => setActiveTab('reports')}
             className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center gap-1.5 transition-colors"
           >
-            <Plus className="w-4 h-4" /> Open POS Terminal
+            <ArrowUpRight className="w-4 h-4" /> Full Reports
           </button>
+        </div>
+      </div>
+
+      {/* Branch Filter — view each shop separately, or combined */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-md flex flex-wrap items-center gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <span className="font-bold text-slate-700 dark:text-slate-300">Viewing:</span>
+        </div>
+        <div className="flex items-center bg-slate-100 dark:bg-slate-950 rounded-xl p-1 gap-1 flex-wrap">
+          <button
+            onClick={() => setSelectedBranch('all')}
+            className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+              selectedBranch === 'all'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+            }`}
+          >
+            All Branches (Combined)
+          </button>
+          {branches.map((b) => (
+            <button
+              key={b}
+              onClick={() => setSelectedBranch(b)}
+              className={`px-3.5 py-1.5 rounded-lg font-bold transition-colors ${
+                selectedBranch === b
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+              }`}
+            >
+              {b}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -165,7 +221,9 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
           <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h3 className="font-bold text-slate-900 dark:text-white text-sm">Revenue Sales Trend (Rs.)</h3>
-              <p className="text-xs text-slate-600 dark:text-slate-500">Daily gross revenue across all branches</p>
+              <p className="text-xs text-slate-600 dark:text-slate-500">
+                {selectedBranch === 'all' ? 'Daily gross revenue across all branches' : `Daily gross revenue — ${selectedBranch}`}
+              </p>
             </div>
             <button
               onClick={() => setActiveTab('reports')}
@@ -246,7 +304,7 @@ export function AdminDashboard({ setActiveTab, onInspectBill }: AdminDashboardPr
           </div>
 
           <div className="space-y-2">
-            {bills.slice(0, 5).map((bill) => (
+            {visibleBills.slice(0, 5).map((bill) => (
               <div
                 key={bill.id}
                 onClick={() => onInspectBill(bill)}
