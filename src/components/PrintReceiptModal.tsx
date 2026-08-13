@@ -161,6 +161,7 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             <div className="text-center border-t-2 border-slate-800 pt-3">
               <p className="font-extrabold text-sm tracking-wide text-slate-900">THANK YOU COME AGAIN</p>
               {footerNote && <p className="text-[10px] text-slate-600 mt-1">{footerNote}</p>}
+              <p className="text-[10px] text-slate-500 mt-2">https://alona.lk/</p>
             </div>
           </div>
         </div>
@@ -196,7 +197,16 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
 
       {/* Print-only CSS layout injection */}
       <style>{`
+        @page {
+          size: 80mm auto;
+          margin: 0;
+        }
         @media print {
+          html, body {
+            width: 80mm;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -207,8 +217,8 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100%;
-            max-width: 76mm;
+            width: 80mm;
+            max-width: 80mm;
             padding: 10px;
             box-shadow: none;
             border: none;
