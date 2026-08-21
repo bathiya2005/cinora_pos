@@ -17,7 +17,7 @@ export function Navbar({ onOpenDeductionModal }: NavbarProps) {
   // Branch accounts show their OWN logo/name (uploaded from here, stored on
   // their own user record) — independent of Settings > Template Settings.
   // Admin is shown as a fixed "Admin Panel" label, not any branch's identity.
-  const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : 'Admin Panel';
+  const companyName = isBranch ? (user?.companyName || user?.branchName || 'Alona POS') : 'Cinora POS';
   const navLogoUrl = isBranch ? user?.logoUrl : '/admin-panel-icon.svg';
 
   const handleLogoFile = (e: ChangeEvent<HTMLInputElement>) => {
