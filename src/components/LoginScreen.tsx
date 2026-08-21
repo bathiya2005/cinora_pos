@@ -15,7 +15,7 @@ export function LoginScreen() {
   // This login screen is shared by every branch and the admin, before we
   // know who's signing in — so it's branded as the generic "Admin Panel"
   // entry point rather than any one branch's identity.
-  const shopName = 'Admin Panel';
+  const shopName = 'Cinora POS';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
