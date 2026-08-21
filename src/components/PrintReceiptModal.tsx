@@ -55,7 +55,7 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
         <div className="p-6 overflow-y-auto flex-1 bg-slate-100/50 dark:bg-slate-950/30">
           <div
             id="printable-receipt"
-            className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-mono text-sm leading-relaxed border-2 border-slate-800"
+            className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-sans [font-variant-numeric:tabular-nums] text-sm leading-relaxed border-2 border-slate-800"
           >
             {/* Business Header — logo top-left, name/details centered next to it */}
             <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[4.25rem_1fr_4.25rem] items-start gap-2">
