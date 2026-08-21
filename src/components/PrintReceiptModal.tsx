@@ -58,16 +58,16 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-mono text-sm leading-relaxed border-2 border-slate-800"
           >
             {/* Business Header — logo top-left, name/details centered next to it */}
-            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[3.25rem_1fr_3.25rem] items-start gap-2">
+            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[4.25rem_1fr_4.25rem] items-start gap-2">
               <div className="pt-0.5">
                 {logoUrl ? (
                   <img
                     src={logoUrl}
                     alt={companyName}
-                    className="h-12 w-12 object-contain"
+                    className="h-16 w-16 object-contain"
                   />
                 ) : (
-                  <div className="w-12 h-12 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-xl">
+                  <div className="w-16 h-16 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-2xl">
                     {companyName.trim().charAt(0).toUpperCase() || 'A'}
                   </div>
                 )}
@@ -108,9 +108,9 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
 
             {/* Line items table */}
             <div className="mb-3">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="border-b-2 border-slate-800 text-slate-800 uppercase font-bold">
+                  <tr className="border-b-2 border-slate-800 text-slate-800 uppercase font-bold text-xs">
                     <th className="py-1">Grade</th>
                     <th className="py-1 text-right">Qty</th>
                     <th className="py-1 text-right">Price</th>
@@ -121,10 +121,10 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
                   {bill.items.map((item, idx) => (
                     <tr key={idx} className="align-top">
                       <td className="py-2 pr-2 font-bold text-slate-900 whitespace-nowrap">{item.productName}</td>
-                      <td className="py-2 text-right font-medium text-slate-800 whitespace-nowrap">
+                      <td className="py-2 text-right font-semibold text-slate-800 whitespace-nowrap">
                         {item.netWeight.toFixed(2)}
                       </td>
-                      <td className="py-2 text-right text-slate-700 whitespace-nowrap">
+                      <td className="py-2 text-right font-semibold text-slate-800 whitespace-nowrap">
                         {item.rate.toFixed(2)}
                       </td>
                       <td className="py-2 text-right font-bold text-slate-900 whitespace-nowrap">
@@ -151,9 +151,9 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
 
             {/* Totals */}
             <div className="pt-2 border-t-2 border-slate-800 mb-3">
-              <div className="flex justify-between text-base font-extrabold text-slate-900">
+              <div className="flex justify-between text-lg font-extrabold text-slate-900">
                 <span>TOTAL:</span>
-                <span className="text-lg">RS: {bill.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-xl">RS: {bill.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
 

@@ -149,7 +149,7 @@ export async function createApp() {
   // Update MY OWN branch identity (Navbar logo + display name shown on my
   // own bills). Any logged-in user (admin or branch) can set their own.
   app.put('/api/users/me/branding', authenticateToken, async (req: AuthRequest, res: Response) => {
-    const { logoUrl, companyName } = req.body;
+    const { logoUrl, companyName, templateGroup } = req.body;
 
     const db = getDb();
     const user = db.users.find((u) => u.id === req.user!.id);
@@ -159,6 +159,7 @@ export async function createApp() {
 
     if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
     if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
+    if (templateGroup === 'ayu' || templateGroup === 'cinora') user.templateGroup = templateGroup;
 
     await saveDb();
     return res.json(user);
@@ -256,7 +257,7 @@ export async function createApp() {
   // from its own Navbar, but editable centrally by the admin too.
   app.put('/api/users/:id/branding', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { logoUrl, companyName } = req.body;
+    const { logoUrl, companyName, templateGroup } = req.body;
 
     const db = getDb();
     const user = db.users.find((u) => u.id === id);
@@ -266,6 +267,7 @@ export async function createApp() {
 
     if (logoUrl !== undefined) user.logoUrl = logoUrl || undefined;
     if (companyName !== undefined) user.companyName = companyName ? String(companyName).trim() : undefined;
+    if (templateGroup === 'ayu' || templateGroup === 'cinora') user.templateGroup = templateGroup;
 
     await saveDb();
     return res.json(user);
@@ -286,27 +288,35 @@ export async function createApp() {
     return res.json({ success: true });
   });
 
-  // Bill Settings Routes
+  // Bill Settings Routes — one full template per group (Ayu / Cinora)
   app.get('/api/bill-settings', authenticateToken, (_req: Request, res: Response) => {
     const db = getDb();
-    return res.json(db.billSettings);
+    return res.json(db.billTemplates);
   });
 
   app.post('/api/bill-settings', authenticateToken, requireRole(['admin']), async (req: Request, res: Response) => {
-    const { companyName, logoUrl, phoneNumbers, address, footerNote } = req.body;
-    const db = getDb();
+    const { group, companyName, tagline, logoUrl, phoneNumbers, address, footerNote } = req.body;
 
-    db.billSettings = {
-      companyName: companyName ?? db.billSettings.companyName,
-      logoUrl: logoUrl ?? db.billSettings.logoUrl,
-      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : db.billSettings.phoneNumbers,
-      address: address ?? db.billSettings.address,
-      footerNote: footerNote ?? db.billSettings.footerNote,
+    if (group !== 'ayu' && group !== 'cinora') {
+      return res.status(400).json({ error: 'A valid template group (ayu or cinora) is required.' });
+    }
+
+    const db = getDb();
+    const current = db.billTemplates[group as 'ayu' | 'cinora'];
+
+    db.billTemplates[group as 'ayu' | 'cinora'] = {
+      group,
+      companyName: companyName ?? current.companyName,
+      tagline: tagline ?? current.tagline,
+      logoUrl: logoUrl ?? current.logoUrl,
+      phoneNumbers: Array.isArray(phoneNumbers) ? phoneNumbers : current.phoneNumbers,
+      address: address ?? current.address,
+      footerNote: footerNote ?? current.footerNote,
       updatedAt: new Date().toISOString(),
     };
 
     await saveDb();
-    return res.json(db.billSettings);
+    return res.json(db.billTemplates);
   });
 
   // Product Management Routes
@@ -473,6 +483,9 @@ export async function createApp() {
     const extraTotal = processedExtra.reduce((acc, e) => acc + e.amount, 0);
     const grandTotal = Number((totalItemsPrice + extraTotal).toFixed(2));
 
+    const templateGroup = req.user!.templateGroup || 'ayu';
+    const template = db.billTemplates[templateGroup] || db.billTemplates.ayu;
+
     const newBill: Bill = {
       id: `bill-${Date.now()}`,
       billNumber: billNum,
@@ -486,8 +499,15 @@ export async function createApp() {
       totalAmount: grandTotal,
       createdBy: req.user!.username,
       createdAt: new Date().toISOString(),
-      companyName: req.user!.companyName || undefined,
-      logoUrl: req.user!.logoUrl || undefined,
+      // Branch's own name/logo override wins when set, else falls back to
+      // its assigned template group's defaults. Everything else (tagline,
+      // address, phone, footer) always comes from the template group.
+      companyName: req.user!.companyName || template.companyName || undefined,
+      logoUrl: req.user!.logoUrl || template.logoUrl || undefined,
+      tagline: template.tagline || undefined,
+      address: template.address || undefined,
+      phoneNumbers: template.phoneNumbers && template.phoneNumbers.length > 0 ? template.phoneNumbers : undefined,
+      footerNote: template.footerNote || undefined,
     };
 
     db.bills.unshift(newBill);
