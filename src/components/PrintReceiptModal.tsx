@@ -58,16 +58,16 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-sans [font-variant-numeric:tabular-nums] text-sm leading-relaxed border-2 border-slate-800"
           >
             {/* Business Header — logo top-left, name/details centered next to it */}
-            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[4.25rem_1fr_4.25rem] items-start gap-2">
+            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[5.25rem_1fr_5.25rem] items-start gap-2">
               <div className="pt-0.5">
                 {logoUrl ? (
                   <img
                     src={logoUrl}
                     alt={companyName}
-                    className="h-16 w-16 object-contain"
+                    className="h-20 w-20 object-contain"
                   />
                 ) : (
-                  <div className="w-16 h-16 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-2xl">
+                  <div className="w-20 h-20 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-3xl">
                     {companyName.trim().charAt(0).toUpperCase() || 'A'}
                   </div>
                 )}
