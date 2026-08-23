@@ -73,6 +73,12 @@ export interface ExtraPayment {
 export interface Bill {
   id: string;
   billNumber: string;
+  // Which template group (Ayu / Cinora) this bill's number was counted
+  // under. Ayu bills are numbered A000001, A000002... and Cinora bills
+  // C000001, C000002... independently — the two sequences never share or
+  // affect each other's count. Older bills created before this change may
+  // not have this field.
+  billGroup?: TemplateGroup;
   branchId: string;
   branchName: string;
   customerName?: string;

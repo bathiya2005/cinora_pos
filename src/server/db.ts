@@ -17,7 +17,11 @@ interface DatabaseSchema {
   products: Product[];
   deductionReasons: DeductionReason[];
   bills: Bill[];
-  billCounter: number;
+  // Independent per-group bill counters. Ayu bills print as A000001,
+  // A000002... and Cinora bills as C000001, C000002... — each group counts
+  // only its own bills, never the other's. Replaces the old single global
+  // `billCounter` (see migrateLegacyBillCounter below).
+  billCounters: Record<TemplateGroup, number>;
 }
 
 let dbMemory: DatabaseSchema | null = null;
@@ -295,7 +299,7 @@ function buildSeedData(): DatabaseSchema {
     products: initialProducts,
     deductionReasons: initialDeductions,
     bills: initialBills,
-    billCounter: 1005,
+    billCounters: { ayu: 0, cinora: 0 },
   };
 }
 
@@ -337,6 +341,25 @@ function migrateLegacyBillTemplates(data: any): boolean {
 }
 
 /**
+ * [FIX: ayu-cinora-bill-counter-split] Migrates the old single global
+ * `billCounter` (shared by both Ayu and Cinora bills, causing one group's
+ * bills to consume numbers from the other's sequence) to independent
+ * per-group `billCounters`. Per explicit instruction, this is a clean reset:
+ * existing bills and their billNumber values are left untouched (no
+ * renumbering of bill history), but going forward Ayu and Cinora each start
+ * counting fresh from A000001 / C000001 with their own independent counter.
+ * Returns true if it changed anything (caller should persist the result).
+ */
+function migrateLegacyBillCounter(data: any): boolean {
+  if (data.billCounters && typeof data.billCounters.ayu === 'number' && typeof data.billCounters.cinora === 'number') {
+    return false;
+  }
+  data.billCounters = { ayu: 0, cinora: 0 };
+  delete data.billCounter;
+  return true;
+}
+
+/**
  * Connects to MongoDB (once per warm process/instance), loads the persisted
  * store document into memory, or seeds and inserts default data if the
  * database is empty. Must be awaited once before the Express server starts
@@ -357,8 +380,15 @@ export async function connectDb(): Promise<void> {
     dbMemory = rest as DatabaseSchema;
     console.log('MongoDB: loaded existing Alona POS data store.');
 
-    if (migrateLegacyBillTemplates(dbMemory)) {
+    const templatesMigrated = migrateLegacyBillTemplates(dbMemory);
+    if (templatesMigrated) {
       console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+    }
+    const counterMigrated = migrateLegacyBillCounter(dbMemory);
+    if (counterMigrated) {
+      console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
+    }
+    if (templatesMigrated || counterMigrated) {
       await saveDb();
     }
   } else {
@@ -389,8 +419,15 @@ export async function refreshDb(): Promise<void> {
     const { _id, ...rest } = existing;
     dbMemory = rest as DatabaseSchema;
 
-    if (migrateLegacyBillTemplates(dbMemory)) {
+    const templatesMigrated = migrateLegacyBillTemplates(dbMemory);
+    if (templatesMigrated) {
       console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+    }
+    const counterMigrated = migrateLegacyBillCounter(dbMemory);
+    if (counterMigrated) {
+      console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
+    }
+    if (templatesMigrated || counterMigrated) {
       await saveDb();
     }
   }

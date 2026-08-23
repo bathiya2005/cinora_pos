@@ -437,11 +437,16 @@ export async function createApp() {
     }
 
     const db = getDb();
-    // [FIX: bill-number-resequencing] billCounter tracks the last number
-    // handed out (not the next one), so pre-increment here — this keeps it
-    // consistent with the delete route's resequencing/reset-to-0 logic.
-    db.billCounter += 1;
-    const billNum = String(db.billCounter).padStart(6, '0');
+    const templateGroup = req.user!.templateGroup || 'ayu';
+    // [FIX: ayu-cinora-bill-counter-split] Each template group (Ayu / Cinora)
+    // has its own independent counter, so billing from one group never
+    // consumes or shifts the other group's sequence. billCounters[group]
+    // tracks the last number handed out for that group (not the next one),
+    // so pre-increment here — consistent with the delete route's per-group
+    // resequencing/reset-to-0 logic below.
+    db.billCounters[templateGroup] += 1;
+    const groupPrefix = templateGroup === 'cinora' ? 'C' : 'A';
+    const billNum = groupPrefix + String(db.billCounters[templateGroup]).padStart(6, '0');
 
     let totalNetWeight = 0;
     let totalItemsPrice = 0;
@@ -487,12 +492,12 @@ export async function createApp() {
     const extraTotal = processedExtra.reduce((acc, e) => acc + e.amount, 0);
     const grandTotal = Number((totalItemsPrice + extraTotal).toFixed(2));
 
-    const templateGroup = req.user!.templateGroup || 'ayu';
     const template = db.billTemplates[templateGroup] || db.billTemplates.ayu;
 
     const newBill: Bill = {
       id: `bill-${Date.now()}`,
       billNumber: billNum,
+      billGroup: templateGroup,
       branchId: req.user!.id,
       branchName: req.user!.branchName || 'Main Station',
       customerName: customerName ? customerName.trim() : 'Counter Cash Sale',
@@ -580,9 +585,14 @@ export async function createApp() {
   // [FIX: bill-number-resequencing] After removal, every remaining bill with a
   // higher sequential number shifts down by one so the numbers stay
   // contiguous (e.g. deleting bill #8 of 10 makes the old #9 become #8), and
-  // the counter that hands out the next number shifts down to match. When
-  // the last bill is removed the counter resets to 0, so the next bill
-  // created starts the sequence over from 1.
+  // the counter that hands out the next number shifts down to match.
+  // [FIX: ayu-cinora-bill-counter-split] This resequencing is scoped to the
+  // deleted bill's own group (Ayu/Cinora) only — deleting an Ayu bill never
+  // renumbers or affects Cinora's bills/counter, and vice versa. Bills from
+  // before this fix (no billGroup, no letter prefix) are left as-is and
+  // don't participate in resequencing, since they don't belong to either
+  // group's sequence. When a group's last bill is removed, that group's
+  // counter resets to 0, so its next bill starts the sequence over from 1.
   app.delete('/api/bills/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const db = getDb();
@@ -594,20 +604,24 @@ export async function createApp() {
 
     db.bills = db.bills.filter((b) => b.id !== id);
 
-    const deletedNum = parseInt(deletedBill.billNumber, 10);
-    if (!isNaN(deletedNum)) {
-      const padLength = deletedBill.billNumber.length;
-      for (const b of db.bills) {
-        const n = parseInt(b.billNumber, 10);
-        if (!isNaN(n) && n > deletedNum) {
-          b.billNumber = String(n - 1).padStart(padLength, '0');
-        }
-      }
-      db.billCounter = Math.max(0, db.billCounter - 1);
-    }
+    const group = deletedBill.billGroup;
+    const prefix = group === 'cinora' ? 'C' : group === 'ayu' ? 'A' : null;
 
-    if (db.bills.length === 0) {
-      db.billCounter = 0;
+    if (group && prefix && deletedBill.billNumber.startsWith(prefix)) {
+      const deletedNum = parseInt(deletedBill.billNumber.slice(prefix.length), 10);
+      if (!isNaN(deletedNum)) {
+        const padLength = deletedBill.billNumber.length - prefix.length;
+        let remainingInGroup = 0;
+        for (const b of db.bills) {
+          if (b.billGroup !== group || !b.billNumber.startsWith(prefix)) continue;
+          remainingInGroup += 1;
+          const n = parseInt(b.billNumber.slice(prefix.length), 10);
+          if (!isNaN(n) && n > deletedNum) {
+            b.billNumber = prefix + String(n - 1).padStart(padLength, '0');
+          }
+        }
+        db.billCounters[group] = remainingInGroup === 0 ? 0 : Math.max(0, db.billCounters[group] - 1);
+      }
     }
 
     await saveDb();
