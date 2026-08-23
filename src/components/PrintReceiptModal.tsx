@@ -11,13 +11,19 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
   const [printed, setPrinted] = useState(false);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
 
-  // [FIX: ayu-logo-not-printing] A fixed 150ms delay wasn't always enough
-  // for the logo <img> to finish decoding before window.print() ran, so the
-  // printed receipt could come out with a blank logo area (most noticeable
-  // on branches whose logo hadn't been rendered anywhere else yet, so it was
-  // still loading for the first time right as Print was clicked). Now we
-  // wait for that image to actually finish loading (with a safety timeout
-  // in case it never fires) before printing.
+  // [FIX: ayu-logo-not-printing] A previous attempt fixed this by waiting
+  // for the image's 'load' event before calling window.print(), but that
+  // still isn't reliable: 'load' fires once the browser has fetched/decoded
+  // the bytes, not once it has actually painted the pixels — and for cached
+  // images the event may not fire again at all. window.print() can still run
+  // a frame before the logo is actually rendered, producing a blank logo
+  // area on the printed page (screen preview looks fine because there's more
+  // time before the user notices). We now use img.decode() (which resolves
+  // only once the image is fully decoded and ready to paint, and resolves
+  // immediately for already-loaded/cached images) followed by two
+  // requestAnimationFrame ticks to guarantee the browser has painted that
+  // decoded frame before we open the print dialog, with a safety timeout in
+  // case decode() is unsupported or never settles.
   const handlePrint = () => {
     setPrinted(true);
     let hasPrinted = false;
@@ -26,12 +32,21 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
       hasPrinted = true;
       window.print();
     };
+    const printAfterPaint = () => {
+      requestAnimationFrame(() => requestAnimationFrame(doPrint));
+    };
 
     const img = logoImgRef.current;
-    if (img && !img.complete) {
-      img.addEventListener('load', doPrint, { once: true });
-      img.addEventListener('error', doPrint, { once: true });
-      setTimeout(doPrint, 1000);
+    if (img && img.src) {
+      setTimeout(doPrint, 1200); // safety net
+      if (typeof img.decode === 'function') {
+        img.decode().then(printAfterPaint).catch(printAfterPaint);
+      } else if (img.complete) {
+        printAfterPaint();
+      } else {
+        img.addEventListener('load', printAfterPaint, { once: true });
+        img.addEventListener('error', printAfterPaint, { once: true });
+      }
     } else {
       setTimeout(doPrint, 150);
     }
