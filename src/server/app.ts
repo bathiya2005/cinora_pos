@@ -437,7 +437,11 @@ export async function createApp() {
     }
 
     const db = getDb();
-    const billNum = String(db.billCounter++).padStart(6, '0');
+    // [FIX: bill-number-resequencing] billCounter tracks the last number
+    // handed out (not the next one), so pre-increment here — this keeps it
+    // consistent with the delete route's resequencing/reset-to-0 logic.
+    db.billCounter += 1;
+    const billNum = String(db.billCounter).padStart(6, '0');
 
     let totalNetWeight = 0;
     let totalItemsPrice = 0;
@@ -572,17 +576,40 @@ export async function createApp() {
     return res.json(bill);
   });
 
-  // Delete Bill (Admin only) — removes the transaction record from bill history & reports
+  // Delete Bill (Admin only) — removes the transaction record from bill history & reports.
+  // [FIX: bill-number-resequencing] After removal, every remaining bill with a
+  // higher sequential number shifts down by one so the numbers stay
+  // contiguous (e.g. deleting bill #8 of 10 makes the old #9 become #8), and
+  // the counter that hands out the next number shifts down to match. When
+  // the last bill is removed the counter resets to 0, so the next bill
+  // created starts the sequence over from 1.
   app.delete('/api/bills/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const db = getDb();
-    const exists = db.bills.some((b) => b.id === id);
+    const deletedBill = db.bills.find((b) => b.id === id);
 
-    if (!exists) {
+    if (!deletedBill) {
       return res.status(404).json({ error: 'Bill not found.' });
     }
 
     db.bills = db.bills.filter((b) => b.id !== id);
+
+    const deletedNum = parseInt(deletedBill.billNumber, 10);
+    if (!isNaN(deletedNum)) {
+      const padLength = deletedBill.billNumber.length;
+      for (const b of db.bills) {
+        const n = parseInt(b.billNumber, 10);
+        if (!isNaN(n) && n > deletedNum) {
+          b.billNumber = String(n - 1).padStart(padLength, '0');
+        }
+      }
+      db.billCounter = Math.max(0, db.billCounter - 1);
+    }
+
+    if (db.bills.length === 0) {
+      db.billCounter = 0;
+    }
+
     await saveDb();
     return res.json({ success: true });
   });

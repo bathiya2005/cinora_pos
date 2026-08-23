@@ -577,9 +577,12 @@ export function ReportsAnalytics() {
           const selected = productAnalysis.filter((p) => selectedProducts.includes(p.category));
           const sumWeight = selected.reduce((s, p) => s + p.totalWeight, 0);
           const sumRevenue = selected.reduce((s, p) => s + p.totalRevenue, 0);
-          const sumDailyAvg = selected.reduce((s, p) => s + p.dailyAvgWeight, 0);
-          const sumMonthlyAvg = selected.reduce((s, p) => s + p.monthlyAvgWeight, 0);
           const combinedAvgPrice = sumWeight > 0 ? sumRevenue / sumWeight : 0;
+          // [FIX: product-wise-averages] Daily/Monthly averages are no longer
+          // added together across the selected products — adding one
+          // product's average to another's isn't a meaningful number. Each
+          // product's own average is shown only in the per-product table
+          // below.
 
           return (
             <div className="mt-2 p-5 bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900 rounded-2xl space-y-4">
@@ -587,7 +590,7 @@ export function ReportsAnalytics() {
                 Combined Performance — {selected.length} Product{selected.length > 1 ? 's' : ''} Selected
               </h4>
 
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Total Weight</p>
                   <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumWeight.toFixed(2)} kg</p>
@@ -600,15 +603,10 @@ export function ReportsAnalytics() {
                   <p className="text-[10px] text-slate-500 uppercase font-bold">Avg Price / kg</p>
                   <p className="text-sm font-black text-slate-900 dark:text-white mt-1">Rs. {combinedAvgPrice.toFixed(2)}</p>
                 </div>
-                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
-                  <p className="text-[10px] text-slate-500 uppercase font-bold">Combined Daily Avg</p>
-                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumDailyAvg.toFixed(2)} kg</p>
-                </div>
-                <div className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-indigo-100 dark:border-indigo-900/60">
-                  <p className="text-[10px] text-slate-500 uppercase font-bold">Combined Monthly Avg</p>
-                  <p className="text-sm font-black text-slate-900 dark:text-white mt-1">{sumMonthlyAvg.toFixed(2)} kg</p>
-                </div>
               </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-500 -mt-1">
+                Daily &amp; Monthly averages are shown per product only (see table below) — they aren't meaningful added together.
+              </p>
 
               {/* Per-product detail breakdown within the selection */}
               <div className="overflow-x-auto">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Bill } from '../types';
 import { Printer, X, Check, Receipt } from 'lucide-react';
 
@@ -9,12 +9,32 @@ interface PrintReceiptModalProps {
 
 export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
   const [printed, setPrinted] = useState(false);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
 
+  // [FIX: ayu-logo-not-printing] A fixed 150ms delay wasn't always enough
+  // for the logo <img> to finish decoding before window.print() ran, so the
+  // printed receipt could come out with a blank logo area (most noticeable
+  // on branches whose logo hadn't been rendered anywhere else yet, so it was
+  // still loading for the first time right as Print was clicked). Now we
+  // wait for that image to actually finish loading (with a safety timeout
+  // in case it never fires) before printing.
   const handlePrint = () => {
     setPrinted(true);
-    setTimeout(() => {
+    let hasPrinted = false;
+    const doPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
       window.print();
-    }, 150);
+    };
+
+    const img = logoImgRef.current;
+    if (img && !img.complete) {
+      img.addEventListener('load', doPrint, { once: true });
+      img.addEventListener('error', doPrint, { once: true });
+      setTimeout(doPrint, 1000);
+    } else {
+      setTimeout(doPrint, 150);
+    }
   };
 
   // Everything is taken from the snapshot saved on the bill at billing time
@@ -58,13 +78,14 @@ export function PrintReceiptModal({ bill, onClose }: PrintReceiptModalProps) {
             className="bg-white text-slate-900 p-6 rounded-lg shadow-md max-w-md mx-auto font-sans [font-variant-numeric:tabular-nums] text-sm leading-relaxed border-2 border-slate-800"
           >
             {/* Business Header — logo top-left, name/details centered next to it */}
-            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[5.25rem_1fr_5.25rem] items-start gap-2">
+            <div className="pb-3 mb-3 border-b-2 border-slate-800 grid grid-cols-[5.25rem_1fr_5.25rem] print:grid-cols-[7.25rem_1fr_7.25rem] items-start gap-2">
               <div className="pt-0.5">
                 {logoUrl ? (
                   <img
+                    ref={logoImgRef}
                     src={logoUrl}
                     alt={companyName}
-                    className="h-20 w-20 object-contain"
+                    className="h-20 w-20 object-contain print:h-28 print:w-28"
                   />
                 ) : (
                   <div className="w-20 h-20 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-3xl">
