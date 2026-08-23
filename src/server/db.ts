@@ -1,6 +1,7 @@
 import { MongoClient, Db as MongoDatabase } from 'mongodb';
 import bcrypt from 'bcryptjs';
 import { User, BillSettings, Product, DeductionReason, Bill, TemplateGroup } from '../types.js';
+import { AYU_LOGO_DATA_URL, CINORA_LOGO_DATA_URL } from './assets/defaultLogos.js';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'alona_pos';
@@ -73,7 +74,7 @@ function buildSeedData(): DatabaseSchema {
       group: 'ayu',
       companyName: 'Ayu Cinnamon',
       tagline: '',
-      logoUrl: '',
+      logoUrl: AYU_LOGO_DATA_URL,
       phoneNumbers: ['0723807879'],
       address: 'Akurassa Road, Yakkalamulla',
       footerNote: '',
@@ -83,7 +84,7 @@ function buildSeedData(): DatabaseSchema {
       group: 'cinora',
       companyName: 'CINORA',
       tagline: 'SPICE EXPORTS (PVT)',
-      logoUrl: '',
+      logoUrl: CINORA_LOGO_DATA_URL,
       phoneNumbers: ['0707998799'],
       address: 'Malidawa Collecting Center',
       footerNote: '',
@@ -341,6 +342,27 @@ function migrateLegacyBillTemplates(data: any): boolean {
 }
 
 /**
+ * [FIX: ayu-logo-not-printing] Backfills the Ayu/Cinora default logos (see
+ * assets/defaultLogos.ts) into an existing install where the template's
+ * logoUrl is still empty. Only fills in a blank — if an admin has already
+ * uploaded a logo for a group (via Settings), that logo is left exactly as
+ * it is. Runs once; after a group has any logoUrl (default or custom) this
+ * is a no-op for it.
+ */
+function migrateDefaultLogos(data: any): boolean {
+  let migrated = false;
+  if (data.billTemplates?.ayu && !data.billTemplates.ayu.logoUrl) {
+    data.billTemplates.ayu.logoUrl = AYU_LOGO_DATA_URL;
+    migrated = true;
+  }
+  if (data.billTemplates?.cinora && !data.billTemplates.cinora.logoUrl) {
+    data.billTemplates.cinora.logoUrl = CINORA_LOGO_DATA_URL;
+    migrated = true;
+  }
+  return migrated;
+}
+
+/**
  * [FIX: ayu-cinora-bill-counter-split] Migrates the old single global
  * `billCounter` (shared by both Ayu and Cinora bills, causing one group's
  * bills to consume numbers from the other's sequence) to independent
@@ -388,7 +410,11 @@ export async function connectDb(): Promise<void> {
     if (counterMigrated) {
       console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
     }
-    if (templatesMigrated || counterMigrated) {
+    const logosMigrated = migrateDefaultLogos(dbMemory);
+    if (logosMigrated) {
+      console.log('MongoDB: backfilled default Ayu/Cinora logos.');
+    }
+    if (templatesMigrated || counterMigrated || logosMigrated) {
       await saveDb();
     }
   } else {
@@ -427,7 +453,11 @@ export async function refreshDb(): Promise<void> {
     if (counterMigrated) {
       console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
     }
-    if (templatesMigrated || counterMigrated) {
+    const logosMigrated = migrateDefaultLogos(dbMemory);
+    if (logosMigrated) {
+      console.log('MongoDB: backfilled default Ayu/Cinora logos.');
+    }
+    if (templatesMigrated || counterMigrated || logosMigrated) {
       await saveDb();
     }
   }
