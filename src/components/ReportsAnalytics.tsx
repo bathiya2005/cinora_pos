@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { usePos } from '../context/PosContext';
-import { BarChart3, Download, Scale, DollarSign, Receipt, Filter, TrendingUp, Store, CheckSquare, Square, Package } from 'lucide-react';
+import { BarChart3, Download, Scale, DollarSign, Receipt, Filter, TrendingUp, Store, CheckSquare, Square, Package, FileText, CalendarDays } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { Bill } from '../types';
 import {
   BarChart,
   Bar,
@@ -43,6 +46,132 @@ export function ReportsAnalytics() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
+  // [FIX: daily-bill-summary-report] Day Summary — one line-item row per
+  // product sold that day, independent of the aggregated report/date-range
+  // filters above (this always looks at a single calendar day). Fetches
+  // full bills (with items) directly rather than reusing the shared
+  // `bills` context state, so it doesn't clash with what Bills History or
+  // anything else has loaded there.
+  const [summaryDate, setSummaryDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [summaryBranch, setSummaryBranch] = useState<string>('all');
+  const [summaryBills, setSummaryBills] = useState<Bill[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+
+  const fetchDailySummary = async () => {
+    if (!summaryDate) return;
+    setSummaryLoading(true);
+    try {
+      const params = new URLSearchParams({ startDate: summaryDate, endDate: summaryDate });
+      if (isAdmin && summaryBranch !== 'all') params.append('branchName', summaryBranch);
+      const res = await fetch(`/api/bills?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('alona_token')}` },
+      });
+      setSummaryBills(res.ok ? await res.json() : []);
+    } catch {
+      setSummaryBills([]);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDailySummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryDate, summaryBranch]);
+
+  // Flatten every bill into one row per product line for the day
+  const summaryRows = summaryBills
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .flatMap((bill) =>
+      bill.items.map((item) => ({
+        bill,
+        item,
+        dateTime: new Date(bill.createdAt).toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        deductionText:
+          item.deductions.length > 0
+            ? item.deductions.map((d) => `${d.reason}: ${d.amount.toFixed(2)}kg`).join(', ')
+            : '-',
+        deductionKg: item.deductions.reduce((s, d) => s + d.amount, 0),
+      }))
+    );
+
+  const summaryShopName = isAdmin
+    ? summaryBranch === 'all'
+      ? 'All Branches'
+      : summaryBranch
+    : summaryBills[0]?.branchName || summaryBills[0]?.companyName || 'My Branch';
+
+  const summaryDateLabel = summaryDate
+    ? new Date(summaryDate + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+    : '';
+
+  const summaryTotals = summaryRows.reduce(
+    (acc, r) => ({
+      grossWeight: acc.grossWeight + r.item.grossWeight,
+      deductionKg: acc.deductionKg + r.deductionKg,
+      netWeight: acc.netWeight + r.item.netWeight,
+      total: acc.total + r.item.lineTotal,
+    }),
+    { grossWeight: 0, deductionKg: 0, netWeight: 0, total: 0 }
+  );
+
+  const handleDownloadDailySummaryPDF = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(summaryShopName, pageWidth / 2, 40, { align: 'center' });
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Daily Bill Summary — ${summaryDateLabel}`, pageWidth / 2, 58, { align: 'center' });
+
+    autoTable(doc, {
+      startY: 78,
+      head: [[
+        'Date & Time',
+        'Bill No',
+        'Products in Bill',
+        'Product (Price / kg)',
+        'Gross (kg)',
+        'Deduction (Reason: kg)',
+        'Net Weight (kg)',
+        'Total (Rs.)',
+      ]],
+      body: summaryRows.map((r) => [
+        r.dateTime,
+        r.bill.billNumber,
+        String(r.bill.items.length),
+        `${r.item.productName} (Rs. ${r.item.rate.toFixed(2)}/kg)`,
+        r.item.grossWeight.toFixed(2),
+        r.deductionText,
+        r.item.netWeight.toFixed(2),
+        r.item.lineTotal.toFixed(2),
+      ]),
+      foot: [[
+        '', '', '', 'DAY TOTAL',
+        summaryTotals.grossWeight.toFixed(2),
+        summaryTotals.deductionKg.toFixed(2) + ' kg',
+        summaryTotals.netWeight.toFixed(2),
+        summaryTotals.total.toFixed(2),
+      ]],
+      styles: { fontSize: 8, cellPadding: 5 },
+      headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' },
+      footStyles: { fillColor: [238, 242, 255], textColor: [30, 27, 75], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    });
+
+    doc.save(`Daily_Bill_Summary_${summaryShopName.replace(/\s+/g, '_')}_${summaryDate}.pdf`);
+  };
 
   const toggleProduct = (cat: string) => {
     setSelectedProducts((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
@@ -242,6 +371,118 @@ export function ReportsAnalytics() {
             Clear Filters
           </button>
         )}
+      </div>
+
+      {/* Daily Bill Summary — line-item-level report for a single day, downloadable as PDF */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl shadow-md overflow-hidden">
+        <div className="p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Daily Bill Summary
+            </h3>
+            <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">
+              Every product line from every bill on a single day, with gross weight, deductions, net weight and total.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <label className="text-slate-600 dark:text-slate-500">Date:</label>
+              <input
+                type="date"
+                value={summaryDate}
+                onChange={(e) => setSummaryDate(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <label className="text-slate-600 dark:text-slate-500">Branch:</label>
+                <select
+                  value={summaryBranch}
+                  onChange={(e) => setSummaryBranch(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="all">All Branches (combined)</option>
+                  {branches.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button
+              onClick={handleDownloadDailySummaryPDF}
+              disabled={summaryRows.length === 0}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center gap-1.5 transition-all shrink-0"
+            >
+              <FileText className="w-4 h-4" /> Download PDF
+            </button>
+          </div>
+        </div>
+
+        {/* Nicely styled header shown on-screen too — shop name + date */}
+        <div className="px-6 pt-4 text-center">
+          <h4 className="text-lg font-black text-slate-900 dark:text-white">{summaryShopName}</h4>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">{summaryDateLabel}</p>
+        </div>
+
+        <div className="p-6 pt-3 overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-500 uppercase font-bold border-b border-slate-300 dark:border-slate-800">
+                <th className="p-3">Date &amp; Time</th>
+                <th className="p-3">Bill No</th>
+                <th className="p-3 text-right">Products in Bill</th>
+                <th className="p-3">Product (Price / kg)</th>
+                <th className="p-3 text-right">Gross (kg)</th>
+                <th className="p-3">Deduction (Reason: kg)</th>
+                <th className="p-3 text-right">Net Weight (kg)</th>
+                <th className="p-3 text-right">Total (Rs.)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              {summaryRows.map((r, idx) => (
+                <tr key={`${r.bill.id}-${r.item.id}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                  <td className="p-3 whitespace-nowrap text-slate-700 dark:text-slate-300">{r.dateTime}</td>
+                  <td className="p-3 font-bold text-slate-900 dark:text-slate-100">{r.bill.billNumber}</td>
+                  <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.bill.items.length}</td>
+                  <td className="p-3 text-slate-700 dark:text-slate-300">
+                    {r.item.productName} <span className="text-slate-400">(Rs. {r.item.rate.toFixed(2)}/kg)</span>
+                  </td>
+                  <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.item.grossWeight.toFixed(2)}</td>
+                  <td className="p-3 text-slate-700 dark:text-slate-300">{r.deductionText}</td>
+                  <td className="p-3 text-right font-semibold text-amber-600 dark:text-amber-400">{r.item.netWeight.toFixed(2)}</td>
+                  <td className="p-3 text-right font-black text-indigo-600 dark:text-indigo-400">{r.item.lineTotal.toFixed(2)}</td>
+                </tr>
+              ))}
+
+              {summaryRows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="p-8 text-center text-slate-500 text-xs">
+                    {summaryLoading ? 'Loading…' : 'No bills for this day.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {summaryRows.length > 0 && (
+              <tfoot>
+                <tr className="bg-indigo-50/60 dark:bg-indigo-950/30 font-bold border-t-2 border-indigo-200 dark:border-indigo-900">
+                  <td className="p-3" colSpan={4}>
+                    DAY TOTAL
+                  </td>
+                  <td className="p-3 text-right text-slate-900 dark:text-slate-100">{summaryTotals.grossWeight.toFixed(2)}</td>
+                  <td className="p-3 text-slate-900 dark:text-slate-100">{summaryTotals.deductionKg.toFixed(2)} kg</td>
+                  <td className="p-3 text-right text-amber-700 dark:text-amber-400">{summaryTotals.netWeight.toFixed(2)}</td>
+                  <td className="p-3 text-right text-indigo-700 dark:text-indigo-400">{summaryTotals.total.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       </div>
 
       {/* KPI Cards */}

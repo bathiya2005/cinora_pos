@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { usePos } from '../context/PosContext';
 import { Product, Deduction, BillItem, ExtraPayment, Bill } from '../types';
 import {
@@ -146,22 +146,43 @@ export function BranchBillingScreen({ onOpenDeductionModal, onBillCreated }: Bra
   const grandTotal = Number((itemsTotal + extraTotal).toFixed(2));
 
   // Finalize Bill
+  // [FIX: duplicate-bill-on-multi-click] Clicking "Finalize & Print Receipt"
+  // more than once in quick succession (double-click, or an impatient extra
+  // tap while the request is still in flight) used to fire createBill()
+  // once per click — each one went through as its own separate bill, since
+  // there was nothing stopping a second click from starting a second
+  // request before the first had finished and cleared the cart. isSubmitting
+  // is a ref (not state) so the guard is synchronous and can't be raced by a
+  // click that lands before a state-driven re-render happens; combined with
+  // disabling the button while a request is in flight, a manually-typed
+  // bill can now only ever be created once per Create Bill click-through.
+  const isSubmitting = useRef(false);
+  const [isCreatingBill, setIsCreatingBill] = useState(false);
+
   const handleFinalizeBill = async () => {
     if (cartItems.length === 0) return;
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+    setIsCreatingBill(true);
 
-    const created = await createBill({
-      customerName: customerName.trim() || undefined,
-      customerContact: customerContact.trim() || undefined,
-      items: cartItems,
-      extraPayments,
-    });
+    try {
+      const created = await createBill({
+        customerName: customerName.trim() || undefined,
+        customerContact: customerContact.trim() || undefined,
+        items: cartItems,
+        extraPayments,
+      });
 
-    if (created) {
-      setCartItems([]);
-      setExtraPayments([]);
-      setCustomerName('');
-      setCustomerContact('');
-      onBillCreated(created);
+      if (created) {
+        setCartItems([]);
+        setExtraPayments([]);
+        setCustomerName('');
+        setCustomerContact('');
+        onBillCreated(created);
+      }
+    } finally {
+      isSubmitting.current = false;
+      setIsCreatingBill(false);
     }
   };
 
@@ -417,11 +438,11 @@ export function BranchBillingScreen({ onOpenDeductionModal, onBillCreated }: Bra
 
               <button
                 onClick={handleFinalizeBill}
-                disabled={cartItems.length === 0}
+                disabled={cartItems.length === 0 || isCreatingBill}
                 className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center justify-center gap-2 transition-all active:scale-[0.99] text-sm"
               >
                 <Printer className="w-5 h-5" />
-                <span>Finalize & Print Receipt</span>
+                <span>{isCreatingBill ? 'Creating Bill…' : 'Finalize & Print Receipt'}</span>
               </button>
             </div>
           </div>
