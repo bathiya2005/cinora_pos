@@ -916,14 +916,15 @@ export function ReportsAnalytics() {
                   cy="50%"
                   outerRadius={80}
                   fill="#8884d8"
-                  label={(entry) => `${entry.category}`}
+                  labelLine={false}
+                  label={({ percent }) => ((percent ?? 0) > 0.05 ? `${((percent ?? 0) * 100).toFixed(0)}%` : '')}
                 >
                   {topCategories.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={colorForCategory(entry.category)} />
                   ))}
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: '11px', lineHeight: '18px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
