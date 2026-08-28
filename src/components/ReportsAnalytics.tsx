@@ -761,7 +761,7 @@ export function ReportsAnalytics() {
         <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Filtered Revenue</span>
-            <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">Rs. {report?.totalRevenue?.toLocaleString() || 0}</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">Rs. {report?.totalRevenue?.toLocaleString() || 0}</h3>
           </div>
           <div className="p-3 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <DollarSign className="w-6 h-6" />
@@ -771,7 +771,7 @@ export function ReportsAnalytics() {
         <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Net Weight Processed</span>
-            <h3 className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{report?.totalWeight?.toLocaleString() || 0} kg</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">{report?.totalWeight?.toLocaleString() || 0} kg</h3>
           </div>
           <div className="p-3 bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 rounded-xl">
             <Scale className="w-6 h-6" />
@@ -791,7 +791,7 @@ export function ReportsAnalytics() {
         <div className="p-5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl flex items-center justify-between shadow-md">
           <div>
             <span className="text-xs font-bold text-slate-600 dark:text-slate-500 uppercase">Avg. Revenue / Bill</span>
-            <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">Rs. {avgPerBill.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">Rs. {avgPerBill.toLocaleString(undefined, { maximumFractionDigits: 0 })}</h3>
           </div>
           <div className="p-3 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 rounded-xl">
             <TrendingUp className="w-6 h-6" />
