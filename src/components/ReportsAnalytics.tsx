@@ -35,8 +35,14 @@ const BRANCH_COLORS = ['#4f46e5', '#059669', '#d97706', '#db2777', '#0891b2', '#
 const tooltipStyle = { backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', color: '#fff', fontSize: '12px' };
 
 export function ReportsAnalytics() {
-  const { user } = usePos();
+  const { user, products } = usePos();
   const isAdmin = user?.role === 'admin';
+
+  // [FIX: bill-report-tab] Page-level tab: the original scrolling dashboard
+  // (charts, PDF-downloadable Daily Bill Summary, etc.) vs the new on-screen
+  // "Bill Report" — pick a date, tick specific products, click Generate,
+  // and see a plain line-item table (no PDF) with a totals row.
+  const [pageTab, setPageTab] = useState<'dashboard' | 'billReport'>('dashboard');
 
   const [reportMode, setReportMode] = useState<'daily' | 'monthly' | 'custom'>('monthly');
   const [startDate, setStartDate] = useState<string>('');
@@ -46,6 +52,83 @@ export function ReportsAnalytics() {
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+
+  // [FIX: bill-report-tab] State for the new "Bill Report" tab, kept fully
+  // separate from the Daily Bill Summary state above so the two features
+  // never interfere with each other.
+  const [billReportDate, setBillReportDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [billReportBranch, setBillReportBranch] = useState<string>('all');
+  const [billReportSelectedProducts, setBillReportSelectedProducts] = useState<string[]>([]);
+  const [billReportBills, setBillReportBills] = useState<Bill[]>([]);
+  const [billReportLoading, setBillReportLoading] = useState(false);
+  const [billReportGenerated, setBillReportGenerated] = useState(false);
+
+  const fetchBillReportBills = async (date: string, branch: string) => {
+    if (!date) return;
+    setBillReportLoading(true);
+    try {
+      const params = new URLSearchParams({ startDate: date, endDate: date });
+      if (isAdmin && branch !== 'all') params.append('branchName', branch);
+      const res = await fetch(`/api/bills?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('alona_token')}` },
+      });
+      setBillReportBills(res.ok ? await res.json() : []);
+    } catch {
+      setBillReportBills([]);
+    } finally {
+      setBillReportLoading(false);
+    }
+  };
+
+  // Once a report has been generated, keep it live if the date or branch changes.
+  useEffect(() => {
+    if (billReportGenerated) fetchBillReportBills(billReportDate, billReportBranch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billReportDate, billReportBranch]);
+
+  const toggleBillReportProduct = (name: string) => {
+    setBillReportSelectedProducts((prev) => (prev.includes(name) ? prev.filter((p) => p !== name) : [...prev, name]));
+  };
+
+  const handleGenerateBillReport = () => {
+    if (!billReportDate || billReportSelectedProducts.length === 0) return;
+    setBillReportGenerated(true);
+    fetchBillReportBills(billReportDate, billReportBranch);
+  };
+
+  // One row per matching product line-item, sorted chronologically, with
+  // Tare/Wet weight split out from that line's named deductions.
+  const billReportRows = billReportBills
+    .slice()
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .flatMap((bill) =>
+      bill.items
+        .filter((item) => billReportSelectedProducts.includes(item.productName))
+        .map((item) => ({
+          bill,
+          item,
+          dateLabel: new Date(bill.createdAt).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          tareWeight: item.deductions.filter((d) => d.reason.toLowerCase().includes('tare')).reduce((s, d) => s + d.amount, 0),
+          wetWeight: item.deductions.filter((d) => d.reason.toLowerCase().includes('wet')).reduce((s, d) => s + d.amount, 0),
+        }))
+    );
+
+  const billReportTotals = billReportRows.reduce(
+    (acc, r) => ({
+      grossWeight: acc.grossWeight + r.item.grossWeight,
+      tareWeight: acc.tareWeight + r.tareWeight,
+      wetWeight: acc.wetWeight + r.wetWeight,
+      netWeight: acc.netWeight + r.item.netWeight,
+      total: acc.total + r.item.lineTotal,
+    }),
+    { grossWeight: 0, tareWeight: 0, wetWeight: 0, netWeight: 0, total: 0 }
+  );
 
   // [FIX: daily-bill-summary-report] Day Summary — one line-item row per
   // product sold that day, independent of the aggregated report/date-range
@@ -296,6 +379,194 @@ export function ReportsAnalytics() {
         </button>
       </div>
 
+      {/* [FIX: bill-report-tab] Page-level tabs */}
+      <div className="flex items-center bg-slate-100 dark:bg-slate-950 rounded-xl p-1 gap-1 w-fit">
+        <button
+          onClick={() => setPageTab('dashboard')}
+          className={`px-4 py-2 rounded-lg font-bold text-xs transition-colors ${
+            pageTab === 'dashboard'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+          }`}
+        >
+          Dashboard
+        </button>
+        <button
+          onClick={() => setPageTab('billReport')}
+          className={`px-4 py-2 rounded-lg font-bold text-xs transition-colors ${
+            pageTab === 'billReport'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800'
+          }`}
+        >
+          Bill Report
+        </button>
+      </div>
+
+      {pageTab === 'billReport' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-2xl shadow-md overflow-hidden">
+            <div className="p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> Bill Report
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-500 mt-1">
+                  Select a date, tick the products you want, then click Generate to view the line items on screen.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <label className="text-slate-600 dark:text-slate-500">Date:</label>
+                  <input
+                    type="date"
+                    value={billReportDate}
+                    onChange={(e) => setBillReportDate(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {isAdmin && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-slate-600 dark:text-slate-500">Branch:</label>
+                    <select
+                      value={billReportBranch}
+                      onChange={(e) => setBillReportBranch(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="all">All Branches (combined)</option>
+                      {branches.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <button
+                  onClick={handleGenerateBillReport}
+                  disabled={billReportSelectedProducts.length === 0 || !billReportDate}
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl text-xs shadow-lg shadow-indigo-200 dark:shadow-indigo-950/50 flex items-center gap-1.5 transition-all shrink-0"
+                >
+                  <BarChart3 className="w-4 h-4" /> Generate
+                </button>
+              </div>
+            </div>
+
+            {/* Product tick-list */}
+            <div className="p-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Select Products</span>
+                {billReportSelectedProducts.length > 0 && (
+                  <button
+                    onClick={() => setBillReportSelectedProducts([])}
+                    className="text-[11px] text-amber-600 dark:text-amber-400 hover:underline font-semibold"
+                  >
+                    Clear Selection ({billReportSelectedProducts.length})
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {products
+                  .filter((p) => p.status === 'active')
+                  .map((p) => {
+                    const isSelected = billReportSelectedProducts.includes(p.name);
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => toggleBillReportProduct(p.name)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-300 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900'
+                        }`}
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 dark:text-slate-700" />
+                        )}
+                        {p.name}
+                      </button>
+                    );
+                  })}
+
+                {products.filter((p) => p.status === 'active').length === 0 && (
+                  <p className="text-xs text-slate-500">No active products found.</p>
+                )}
+              </div>
+            </div>
+
+            {/* On-screen report — only shown once Generate has been clicked */}
+            {billReportGenerated ? (
+              <div className="p-6 pt-4 overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-500 uppercase font-bold border-b border-slate-300 dark:border-slate-800">
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Bill Number</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3 text-right">Gross Weight</th>
+                      <th className="p-3 text-right">Tare Weight</th>
+                      <th className="p-3 text-right">Wet Weight</th>
+                      <th className="p-3 text-right">Net Weight</th>
+                      <th className="p-3 text-right">Unit Price</th>
+                      <th className="p-3 text-right">Total Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                    {billReportRows.map((r, idx) => (
+                      <tr key={`${r.bill.id}-${r.item.id}-${idx}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                        <td className="p-3 whitespace-nowrap text-slate-700 dark:text-slate-300">{r.dateLabel}</td>
+                        <td className="p-3 font-bold text-slate-900 dark:text-slate-100">{r.bill.billNumber}</td>
+                        <td className="p-3 text-slate-700 dark:text-slate-300">{r.item.productName}</td>
+                        <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.item.grossWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.tareWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.wetWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right font-semibold text-amber-600 dark:text-amber-400">{r.item.netWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-slate-700 dark:text-slate-300">{r.item.rate.toFixed(2)}</td>
+                        <td className="p-3 text-right font-black text-indigo-600 dark:text-indigo-400">{r.item.lineTotal.toFixed(2)}</td>
+                      </tr>
+                    ))}
+
+                    {billReportRows.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="p-8 text-center text-slate-500 text-xs">
+                          {billReportLoading ? 'Loading…' : 'No matching bills for the selected date and products.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {billReportRows.length > 0 && (
+                    <tfoot>
+                      <tr className="bg-indigo-50/60 dark:bg-indigo-950/30 font-bold border-t-2 border-indigo-200 dark:border-indigo-900">
+                        <td className="p-3" colSpan={3}>
+                          TOTAL
+                        </td>
+                        <td className="p-3 text-right text-slate-900 dark:text-slate-100">{billReportTotals.grossWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-slate-900 dark:text-slate-100">{billReportTotals.tareWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-slate-900 dark:text-slate-100">{billReportTotals.wetWeight.toFixed(2)}</td>
+                        <td className="p-3 text-right text-amber-700 dark:text-amber-400">{billReportTotals.netWeight.toFixed(2)}</td>
+                        <td className="p-3"></td>
+                        <td className="p-3 text-right text-indigo-700 dark:text-indigo-400">{billReportTotals.total.toFixed(2)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-slate-500 text-xs">
+                Tick one or more products above and click Generate to view the report.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {pageTab === 'dashboard' && (
+      <>
       {/* Date & Branch Filter Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-md flex flex-wrap items-center gap-3 text-xs">
         <div className="flex items-center gap-2">
@@ -929,6 +1200,8 @@ export function ReportsAnalytics() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
