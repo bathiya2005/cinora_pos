@@ -8,13 +8,29 @@ import { createApp } from '../src/server/app.js';
 // requests handled by the same lambda instance), so we don't reconnect to
 // MongoDB or rebuild the Express app on every request.
 let cachedApp: Express | null = null;
+// [FIX: connect-race] Same "leapfrogging" race as connectDb() in db.ts could
+// happen here too: two concurrent cold-start requests could both see
+// `cachedApp` still null and both start building it. connectDb() itself is
+// now race-safe, but without this guard we'd still needlessly run
+// createApp() twice. Sharing one in-flight promise means every concurrent
+// request waits for the same single setup instead of racing.
+let appPromise: Promise<Express> | null = null;
 
 async function getApp(): Promise<Express> {
-  if (!cachedApp) {
-    await connectDb();
-    cachedApp = await createApp();
+  if (cachedApp) return cachedApp;
+  if (!appPromise) {
+    appPromise = (async () => {
+      await connectDb();
+      const app = await createApp();
+      cachedApp = app;
+      return app;
+    })();
   }
-  return cachedApp;
+  try {
+    return await appPromise;
+  } finally {
+    appPromise = null;
+  }
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {

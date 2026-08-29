@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { getDb, saveDb, refreshDb } from './db.js';
+import { getDb, saveDb, refreshDb, listBills, getBillById, insertBill, deleteBillById, bulkUpdateBillNumbers } from './db.js';
 import { User, Bill, BillItem, ExtraPayment } from '../types.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'alona-pos-secret-jwt-key-2026';
@@ -519,25 +519,29 @@ export async function createApp() {
       footerNote: template.footerNote || undefined,
     };
 
-    db.bills.unshift(newBill);
+    // [FIX: bills-own-collection] Insert the bill as its own document
+    // instead of appending to (and rewriting) a giant embedded array.
+    await insertBill(newBill);
+    // Counter update lives in the small main document — this stays fast
+    // and constant-time no matter how many bills exist.
     await saveDb();
 
     return res.status(201).json(newBill);
   });
 
   // Get Bills List (Filterable)
-  app.get('/api/bills', authenticateToken, (req: AuthRequest, res: Response) => {
-    const db = getDb();
-    let bills = [...db.bills];
-
-    // Branch users can only see their own branch bills
+  app.get('/api/bills', authenticateToken, async (req: AuthRequest, res: Response) => {
+    // [FIX: bills-own-collection] Branch scoping now happens at the
+    // database query level (only that branch's bills are ever transferred
+    // over the network), instead of pulling every branch's bills for
+    // every business into memory just to filter them out here.
+    let bills: Bill[];
     if (req.user?.role === 'branch') {
-      bills = bills.filter((b) => b.branchId === req.user?.id || b.branchName === req.user?.branchName);
-    } else if (req.query.branchName) {
-      const bName = String(req.query.branchName);
-      if (bName !== 'all') {
-        bills = bills.filter((b) => b.branchName.toLowerCase() === bName.toLowerCase());
-      }
+      bills = await listBills({ branchId: req.user.id, branchName: req.user.branchName });
+    } else if (req.query.branchName && req.query.branchName !== 'all') {
+      bills = await listBills({ branchName: String(req.query.branchName) });
+    } else {
+      bills = await listBills();
     }
 
     if (req.query.search) {
@@ -564,10 +568,9 @@ export async function createApp() {
   });
 
   // Get Single Bill
-  app.get('/api/bills/:id', authenticateToken, (req: AuthRequest, res: Response) => {
+  app.get('/api/bills/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const db = getDb();
-    const bill = db.bills.find((b) => b.id === id || b.billNumber === id);
+    const bill = await getBillById(id);
 
     if (!bill) {
       return res.status(404).json({ error: 'Bill not found.' });
@@ -596,13 +599,11 @@ export async function createApp() {
   app.delete('/api/bills/:id', authenticateToken, requireRole(['admin']), async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const db = getDb();
-    const deletedBill = db.bills.find((b) => b.id === id);
+    const deletedBill = await deleteBillById(id);
 
     if (!deletedBill) {
       return res.status(404).json({ error: 'Bill not found.' });
     }
-
-    db.bills = db.bills.filter((b) => b.id !== id);
 
     const group = deletedBill.billGroup;
     const prefix = group === 'cinora' ? 'C' : group === 'ayu' ? 'A' : null;
@@ -611,15 +612,21 @@ export async function createApp() {
       const deletedNum = parseInt(deletedBill.billNumber.slice(prefix.length), 10);
       if (!isNaN(deletedNum)) {
         const padLength = deletedBill.billNumber.length - prefix.length;
+        // [FIX: bills-own-collection] Only this group's bills need to be
+        // pulled in to compute the resequenced numbers — not every bill
+        // ever created across every branch and group.
+        const groupBills = await listBills();
         let remainingInGroup = 0;
-        for (const b of db.bills) {
+        const updates: { id: string; billNumber: string }[] = [];
+        for (const b of groupBills) {
           if (b.billGroup !== group || !b.billNumber.startsWith(prefix)) continue;
           remainingInGroup += 1;
           const n = parseInt(b.billNumber.slice(prefix.length), 10);
           if (!isNaN(n) && n > deletedNum) {
-            b.billNumber = prefix + String(n - 1).padStart(padLength, '0');
+            updates.push({ id: b.id, billNumber: prefix + String(n - 1).padStart(padLength, '0') });
           }
         }
+        await bulkUpdateBillNumbers(updates);
         db.billCounters[group] = remainingInGroup === 0 ? 0 : Math.max(0, db.billCounters[group] - 1);
       }
     }
@@ -629,15 +636,16 @@ export async function createApp() {
   });
 
   // Reports & Analytics Route
-  app.get('/api/reports', authenticateToken, requireRole(['admin', 'branch']), (req: AuthRequest, res: Response) => {
+  app.get('/api/reports', authenticateToken, requireRole(['admin', 'branch']), async (req: AuthRequest, res: Response) => {
     const db = getDb();
-    let bills = [...db.bills];
-
     const isBranchUser = req.user?.role === 'branch';
+    let bills: Bill[];
     if (isBranchUser) {
-      bills = bills.filter((b) => b.branchId === req.user?.id || b.branchName === req.user?.branchName);
+      bills = await listBills({ branchId: req.user?.id, branchName: req.user?.branchName });
     } else if (req.query.branchName && req.query.branchName !== 'all') {
-      bills = bills.filter((b) => b.branchName.toLowerCase() === String(req.query.branchName).toLowerCase());
+      bills = await listBills({ branchName: String(req.query.branchName) });
+    } else {
+      bills = await listBills();
     }
 
     // Bills scoped by role/branch, but BEFORE the date filter — used for the

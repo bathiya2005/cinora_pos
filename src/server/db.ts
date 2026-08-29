@@ -5,9 +5,24 @@ import { AYU_LOGO_DATA_URL, CINORA_LOGO_DATA_URL } from './assets/defaultLogos.j
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'alona_pos';
-// Single document that stores the whole app state (users, products, bills, etc.)
+// Single document that stores the whole app state (users, products, deduction
+// reasons, templates, counters). Bills are NOT stored here — see
+// BILLS_COLLECTION below and [FIX: bills-own-collection].
 const STORE_COLLECTION = 'pos_store';
 const STORE_DOC_ID = 'main';
+// [FIX: bills-own-collection] Each bill is its own document in its own
+// collection, instead of living inside one giant `bills` array embedded in
+// the `pos_store` main document. Previously every single request — even
+// ones that never touched bills, like loading the dashboard or checking
+// login — ran refreshDb(), which read the ENTIRE main document (including
+// every bill ever created) off MongoDB, and every write (saveDb()) rewrote
+// that entire document back. As the bills array grew throughout a business
+// day, every request got progressively slower, and the whole store document
+// was creeping toward MongoDB's 16MB single-document limit. Storing bills as
+// individual documents means the main document stays small and constant-size
+// forever, and bill reads/writes only touch the bills that are actually
+// relevant to that request (a single bill lookup, or filtered by branch).
+const BILLS_COLLECTION = 'bills';
 
 interface DatabaseSchema {
   users: User[];
@@ -17,7 +32,14 @@ interface DatabaseSchema {
   billTemplates: Record<TemplateGroup, BillSettings>;
   products: Product[];
   deductionReasons: DeductionReason[];
-  bills: Bill[];
+  // [FIX: bills-own-collection] No longer stored here — bills live in their
+  // own MongoDB collection (BILLS_COLLECTION). Use listBills()/getBillById()/
+  // insertBill()/deleteBillById()/bulkUpdateBillNumbers() below instead of
+  // reading/writing a `bills` field on this object. `bills?: Bill[]` is kept
+  // ONLY as an optional legacy field so a pre-migration document (which still
+  // has the old embedded array) can be read once and migrated; new code must
+  // never write to it.
+  bills?: Bill[];
   // Independent per-group bill counters. Ayu bills print as A000001,
   // A000002... and Cinora bills as C000001, C000002... — each group counts
   // only its own bills, never the other's. Replaces the old single global
@@ -299,9 +321,13 @@ function buildSeedData(): DatabaseSchema {
     billTemplates: initialBillTemplates,
     products: initialProducts,
     deductionReasons: initialDeductions,
-    bills: initialBills,
+    // [FIX: bills-own-collection] Seed bills are inserted into their own
+    // collection separately (see connectDb()'s "no existing document" branch)
+    // — kept here too so buildSeedData() stays a single source of truth for
+    // what a fresh install's demo bills look like.
+    seedBills: initialBills,
     billCounters: { ayu: 0, cinora: 0 },
-  };
+  } as DatabaseSchema & { seedBills: Bill[] };
 }
 
 /**
@@ -382,48 +408,137 @@ function migrateLegacyBillCounter(data: any): boolean {
 }
 
 /**
+ * [FIX: bills-own-collection] One-time migration for installs created before
+ * bills got their own collection: if the main document still has its old
+ * embedded `bills` array, copy every one of those bills into the new
+ * `bills` collection (upsert by id, so re-running this is always safe and
+ * never duplicates or overwrites a bill that's already there), then strip
+ * the array off the in-memory copy of the main document. The caller is
+ * responsible for both persisting the now-bills-free main document (via
+ * saveDb()) AND physically removing the old field from MongoDB — see the
+ * explicit $unset in connectDb()/refreshDb() below, because saveDb()'s
+ * $set alone would leave the old (large) `bills` field sitting untouched
+ * in the database. No bill data is ever deleted by this — every bill that
+ * was in the old array ends up in the new collection before the old array
+ * is dropped.
+ */
+async function migrateBillsToOwnCollection(data: any): Promise<boolean> {
+  if (!Array.isArray(data.bills) || data.bills.length === 0) {
+    if (Array.isArray(data.bills)) delete data.bills; // empty array, nothing to move
+    return false;
+  }
+  if (!mongoDb) return false;
+
+  const billsCollection = mongoDb.collection(BILLS_COLLECTION);
+  const ops = data.bills.map((b: Bill) => ({
+    updateOne: { filter: { _id: b.id } as any, update: { $setOnInsert: { _id: b.id, ...b } }, upsert: true },
+  }));
+  await billsCollection.bulkWrite(ops);
+
+  const movedCount = data.bills.length;
+  delete data.bills;
+  console.log(`MongoDB: migrated ${movedCount} bill(s) from the main document into their own collection.`);
+  return true;
+}
+
+// [FIX: connect-race] Tracks an in-progress connectDb() call so that
+// concurrent requests hitting a cold serverless instance at the same time
+// all await the SAME connection attempt, instead of each one racing ahead
+// independently.
+let connectPromise: Promise<void> | null = null;
+
+/**
  * Connects to MongoDB (once per warm process/instance), loads the persisted
  * store document into memory, or seeds and inserts default data if the
  * database is empty. Must be awaited once before the Express server starts
  * handling requests.
  */
 export async function connectDb(): Promise<void> {
-  if (mongoDb) return; // client already connected, reuse it
+  // Fully initialized already (both the client AND the in-memory data are
+  // ready) — safe to reuse immediately.
+  if (mongoDb && dbMemory) return;
 
-  mongoClient = new MongoClient(MONGODB_URI);
-  await mongoClient.connect();
-  mongoDb = mongoClient.db(MONGODB_DB_NAME);
+  // [FIX: connect-race] A connection is already being set up (e.g. by a
+  // concurrent request that arrived a moment earlier on the same cold-
+  // starting lambda). Previously, the old guard here was only `if (mongoDb)
+  // return;`, checked *before* `dbMemory` was actually populated below. On
+  // Vercel, two requests can land on the same fresh instance close enough
+  // together that: request A starts connecting and sets `mongoDb`, but is
+  // still awaiting the database read that populates `dbMemory`; request B
+  // then calls connectDb(), sees `mongoDb` already set, returns immediately
+  // thinking setup is done, and moves on to call getDb() — which still
+  // throws "Database not initialized" because `dbMemory` genuinely isn't
+  // ready yet. Waiting on the shared in-flight promise instead means every
+  // caller only proceeds once the whole connect-and-load sequence has
+  // actually finished.
+  if (connectPromise) return connectPromise;
 
-  const collection = mongoDb.collection<{ _id: string } & DatabaseSchema>(STORE_COLLECTION);
-  const existing = await collection.findOne({ _id: STORE_DOC_ID });
+  connectPromise = (async () => {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    mongoDb = mongoClient.db(MONGODB_DB_NAME);
 
-  if (existing) {
-    const { _id, ...rest } = existing;
-    dbMemory = rest as DatabaseSchema;
-    console.log('MongoDB: loaded existing Alona POS data store.');
+    const collection = mongoDb.collection<{ _id: string } & DatabaseSchema>(STORE_COLLECTION);
+    const existing = await collection.findOne({ _id: STORE_DOC_ID });
 
-    const templatesMigrated = migrateLegacyBillTemplates(dbMemory);
-    if (templatesMigrated) {
-      console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+    if (existing) {
+      const { _id, ...rest } = existing;
+      dbMemory = rest as DatabaseSchema;
+      console.log('MongoDB: loaded existing Alona POS data store.');
+
+      const templatesMigrated = migrateLegacyBillTemplates(dbMemory);
+      if (templatesMigrated) {
+        console.log('MongoDB: migrated legacy billSettings document to billTemplates (ayu/cinora).');
+      }
+      const counterMigrated = migrateLegacyBillCounter(dbMemory);
+      if (counterMigrated) {
+        console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
+      }
+      const logosMigrated = migrateDefaultLogos(dbMemory);
+      if (logosMigrated) {
+        console.log('MongoDB: backfilled default Ayu/Cinora logos.');
+      }
+      const billsMigrated = await migrateBillsToOwnCollection(dbMemory);
+      if (templatesMigrated || counterMigrated || logosMigrated || billsMigrated) {
+        await saveDb();
+      }
+      if (billsMigrated) {
+        // $set (inside saveDb()) never removes a field that's simply absent
+        // from the object being set — the old, large `bills` array would
+        // otherwise stay sitting in MongoDB forever. Explicitly drop it now
+        // that every bill it contained has been confirmed copied into the
+        // new collection above.
+        await collection.updateOne({ _id: STORE_DOC_ID }, { $unset: { bills: '' } });
+      }
+    } else {
+      const seed = buildSeedData() as DatabaseSchema & { seedBills: Bill[] };
+      const { seedBills, ...storeData } = seed;
+      dbMemory = storeData;
+      await collection.insertOne({ _id: STORE_DOC_ID, ...dbMemory });
+      // [FIX: bills-own-collection] Seed bills go straight into their own
+      // collection, never into the main store document.
+      if (seedBills.length > 0) {
+        await mongoDb
+          .collection(BILLS_COLLECTION)
+          .insertMany(seedBills.map((b) => ({ _id: b.id, ...b })) as any);
+      }
+      console.log('MongoDB: no existing data found, seeded default Alona POS data.');
     }
-    const counterMigrated = migrateLegacyBillCounter(dbMemory);
-    if (counterMigrated) {
-      console.log('MongoDB: migrated legacy billCounter to independent ayu/cinora billCounters.');
-    }
-    const logosMigrated = migrateDefaultLogos(dbMemory);
-    if (logosMigrated) {
-      console.log('MongoDB: backfilled default Ayu/Cinora logos.');
-    }
-    if (templatesMigrated || counterMigrated || logosMigrated) {
-      await saveDb();
-    }
-  } else {
-    dbMemory = buildSeedData();
-    await collection.insertOne({ _id: STORE_DOC_ID, ...dbMemory });
-    console.log('MongoDB: no existing data found, seeded default Alona POS data.');
+
+    console.log(`MongoDB: connected to database "${MONGODB_DB_NAME}".`);
+  })();
+
+  try {
+    await connectPromise;
+  } catch (err) {
+    // A failed attempt must not be remembered as "in progress" forever —
+    // clear the client/db state too so the next call retries cleanly.
+    mongoClient = null;
+    mongoDb = null;
+    throw err;
+  } finally {
+    connectPromise = null;
   }
-
-  console.log(`MongoDB: connected to database "${MONGODB_DB_NAME}".`);
 }
 
 /**
@@ -457,10 +572,71 @@ export async function refreshDb(): Promise<void> {
     if (logosMigrated) {
       console.log('MongoDB: backfilled default Ayu/Cinora logos.');
     }
-    if (templatesMigrated || counterMigrated || logosMigrated) {
+    const billsMigrated = await migrateBillsToOwnCollection(dbMemory);
+    if (templatesMigrated || counterMigrated || logosMigrated || billsMigrated) {
       await saveDb();
     }
+    if (billsMigrated) {
+      await collection.updateOne({ _id: STORE_DOC_ID }, { $unset: { bills: '' } });
+    }
   }
+}
+
+// ---------------------------------------------------------------------------
+// [FIX: bills-own-collection] Bill accessors — bills live in their own
+// MongoDB collection, one document per bill (_id = bill.id), NOT inside the
+// main pos_store document. All bill reads/writes go through these functions.
+// ---------------------------------------------------------------------------
+
+function billsCollection() {
+  if (!mongoDb) throw new Error('Database not initialized. Call connectDb() before accessing bills.');
+  return mongoDb.collection(BILLS_COLLECTION);
+}
+
+function stripMongoId<T>(doc: any): T {
+  const { _id, ...rest } = doc;
+  return rest as T;
+}
+
+/**
+ * Lists bills, optionally scoped at the database level to one branch (by
+ * branchId or branchName) so branch users never even transfer other
+ * branches' bills over the network. Sorted newest first, matching the old
+ * array's unshift() ordering. Any remaining filters (search text, date
+ * range) are still applied by the caller in app.ts, same as before.
+ */
+export async function listBills(scope: { branchId?: string; branchName?: string } = {}): Promise<Bill[]> {
+  const filter: any = {};
+  const nameRegex = (name: string) => new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+  if (scope.branchId) {
+    filter.$or = [{ branchId: scope.branchId }, ...(scope.branchName ? [{ branchName: nameRegex(scope.branchName) }] : [])];
+  } else if (scope.branchName) {
+    filter.branchName = nameRegex(scope.branchName);
+  }
+  const docs = await billsCollection().find(filter).sort({ createdAt: -1 }).toArray();
+  return docs.map((d) => stripMongoId<Bill>(d));
+}
+
+export async function getBillById(id: string): Promise<Bill | null> {
+  const doc = await billsCollection().findOne({ $or: [{ id }, { billNumber: id }] } as any);
+  return doc ? stripMongoId<Bill>(doc) : null;
+}
+
+export async function insertBill(bill: Bill): Promise<void> {
+  await billsCollection().insertOne({ _id: bill.id, ...bill } as any);
+}
+
+export async function deleteBillById(id: string): Promise<Bill | null> {
+  const doc = await billsCollection().findOneAndDelete({ id } as any);
+  return doc ? stripMongoId<Bill>(doc) : null;
+}
+
+/** Bulk-renumbers bills (used by the delete route's resequencing logic). */
+export async function bulkUpdateBillNumbers(updates: { id: string; billNumber: string }[]): Promise<void> {
+  if (updates.length === 0) return;
+  await billsCollection().bulkWrite(
+    updates.map((u) => ({ updateOne: { filter: { id: u.id } as any, update: { $set: { billNumber: u.billNumber } } } }))
+  );
 }
 
 /** Synchronous access to the in-memory store. connectDb() must run first. */
